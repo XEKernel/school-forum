@@ -388,11 +388,9 @@ const messageController = {
   async deleteMessage(req, res) {
     try {
       const { messageId } = req.params;
-      const { userId } = req.body;
-
-      if (!userId) {
-        return res.status(400).json(generateErrorResponse('用户ID不能为空'));
-      }
+      // userId 来自已认证的 JWT：此前取 req.body.userId（可伪造），
+      // 能替他人在其会话里把消息标记为删除（写入型 IDOR）
+      const userId = req.user.id;
 
       const message = await Message.findOne({ id: messageId });
       if (!message) {
@@ -423,11 +421,8 @@ const messageController = {
   async deleteConversation(req, res) {
     try {
       const { conversationId } = req.params;
-      const { userId } = req.body;
-
-      if (!userId) {
-        return res.status(400).json(generateErrorResponse('用户ID不能为空'));
-      }
+      // 同上：身份只认 JWT，不再信任请求体里的 userId
+      const userId = req.user.id;
 
       // 验证用户是否是会话参与者
       const conversation = await Conversation.findOne({ id: conversationId });

@@ -41,12 +41,14 @@ const favoriteController = {
         return res.status(400).json(generateErrorResponse(result.message));
       }
 
-      // 增加Redis中的收藏计数
-      await favoriteCache.incrPostFavoriteCount(postId);
+      // 增加Redis中的收藏计数（incr 会返回新值；Redis 不可用时返回 null）
+      const cachedCount = await favoriteCache.incrPostFavoriteCount(postId);
 
-      // 获取最新收藏数
-      let favoriteCount = await favoriteCache.getPostFavoriteCount(postId);
-      if (favoriteCount === null) {
+      // 校准分支必须可达：incr 之后 get 一般非 null，旧写法让这段永远不会执行，
+      // 计数一旦漂移就没有任何回填路径。这里改为「Redis 不可用 或 计数异常(<=0)」时
+      // 以数据库为准重算并回填缓存。
+      let favoriteCount = cachedCount;
+      if (favoriteCount === null || favoriteCount <= 0) {
         favoriteCount = await Favorite.getFavoriteCount(postId);
         await favoriteCache.setPostFavoriteCount(postId, favoriteCount);
       }
@@ -74,11 +76,11 @@ const favoriteController = {
       }
 
       // 减少Redis中的收藏计数
-      await favoriteCache.decrPostFavoriteCount(postId);
+      const cachedCount = await favoriteCache.decrPostFavoriteCount(postId);
 
-      // 获取最新收藏数
-      let favoriteCount = await favoriteCache.getPostFavoriteCount(postId);
-      if (favoriteCount === null) {
+      // 同上：计数为负说明缓存与库已经不一致，以数据库为准回填
+      let favoriteCount = cachedCount;
+      if (favoriteCount === null || favoriteCount < 0) {
         favoriteCount = await Favorite.getFavoriteCount(postId);
         await favoriteCache.setPostFavoriteCount(postId, favoriteCount);
       }

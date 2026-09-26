@@ -620,7 +620,7 @@ const postController = {
 
       res.status(201).json(generateSuccessResponse({ post: newPost }, '帖子发布成功'));
     } catch (error) {
-      logger.logError('发布帖子失败', { error: error.message, userId: req.body.userId });
+      logger.logError('发布帖子失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -877,7 +877,7 @@ const postController = {
       
       res.status(201).json(generateSuccessResponse({ comment: newComment }, '评论添加成功'));
     } catch (error) {
-      logger.logError('评论操作失败', { error: error.message, postId: req.params.id, userId: req.body.userId });
+      logger.logError('评论操作失败', { error: error.message, postId: req.params.id, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -965,7 +965,10 @@ const postController = {
         if (reply.userId !== userId && post.userId !== userId) {
           return res.status(403).json(generateErrorResponse('无权限删除此回复'));
         }
-        
+
+        // 级联删除：该回复下的嵌套回复一并删除（此前只删父级，子回复会成为永远读不到的孤儿数据）
+        const orphanNested = Array.isArray(reply.replies) ? reply.replies.slice() : [];
+
         comment.replies.splice(replyIndex, 1);
         await updatePost(postId, { comments });
         
@@ -974,6 +977,12 @@ const postController = {
 
         // 递减被删回复作者的评论数
         await adjustUserCommentCount(reply.userId, -1);
+        for (const orphan of orphanNested) {
+          await adjustUserCommentCount(orphan.userId, -1);
+        }
+        if (orphanNested.length > 0) {
+          logger.logInfo('删除回复时级联清理嵌套回复', { postId, replyId, cascaded: orphanNested.length });
+        }
 
         return res.json(generateSuccessResponse({}, '回复删除成功'));
       }
@@ -983,7 +992,16 @@ const postController = {
       if (!canDeleteComment(comment, post, userId)) {
         return res.status(403).json(generateErrorResponse('无权限删除此评论'));
       }
-      
+
+      // 级联删除：该评论下的所有回复与嵌套回复一并删除（否则成为永远读不到的孤儿数据）
+      const cascadedAuthors = [];
+      for (const r of (Array.isArray(comment.replies) ? comment.replies : [])) {
+        cascadedAuthors.push(r.userId);
+        for (const n of (Array.isArray(r.replies) ? r.replies : [])) {
+          cascadedAuthors.push(n.userId);
+        }
+      }
+
       comments.splice(commentIndex, 1);
       await updatePost(postId, { comments });
       
@@ -992,6 +1010,12 @@ const postController = {
 
       // 递减被删评论作者的评论数（此前只增不减，commentCount 会持续虚高）
       await adjustUserCommentCount(comment.userId, -1);
+      for (const uid of cascadedAuthors) {
+        await adjustUserCommentCount(uid, -1);
+      }
+      if (cascadedAuthors.length > 0) {
+        logger.logInfo('删除评论时级联清理回复', { postId, commentId, cascaded: cascadedAuthors.length });
+      }
 
       res.json(generateSuccessResponse({}, '评论删除成功'));
     } catch (error) {
@@ -1153,7 +1177,7 @@ const postController = {
 
       res.json(generateSuccessResponse({ post: updatedPost }, '帖子编辑成功'));
     } catch (error) {
-      logger.logError('编辑帖子失败', { error: error.message, postId: req.params.id, userId: req.body.userId });
+      logger.logError('编辑帖子失败', { error: error.message, postId: req.params.id, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -1322,7 +1346,7 @@ const postController = {
 
       res.status(201).json(generateSuccessResponse({ reply: newReply }, '回复添加成功'));
     } catch (error) {
-      logger.logError('回复评论失败', { error: error.message, postId: req.params.id, commentId: req.params.commentId, userId: req.body.userId });
+      logger.logError('回复评论失败', { error: error.message, postId: req.params.id, commentId: req.params.commentId, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },

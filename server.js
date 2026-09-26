@@ -89,6 +89,12 @@ const { checkMaintenanceMode, checkSelfDestructMode, debugModeLogger } = require
 
 const app = express();
 
+// 反向代理下的真实 IP 解析
+// 默认 false：直连监听（PM2 直接听 2080）时 req.ip 就是 socket 地址，最准确；
+// 一旦前面加了 Nginx/CDN，必须设置 TRUST_PROXY（例如 TRUST_PROXY=1），
+// 否则所有请求的 req.ip 都会变成代理 IP → 全站共用一个限流桶（一人打满全站 429）。
+app.set('trust proxy', process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1' ? 1 : false);
+
 // HTTP server 实例（优雅关闭时需要 close() 停止接收新连接并等待在途请求完成）
 let httpServer = null;
 

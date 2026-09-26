@@ -186,7 +186,11 @@ function readConfig() {
 function writeConfig(config) {
   try {
     const configStr = JSON.stringify(config, null, 2);
-    fs.writeFileSync(CONFIG_FILE, configStr, 'utf8');
+    // 原子写：先写临时文件再 rename。直接 writeFileSync 在进程被杀/磁盘满时
+    // 会留下半截 JSON，下次启动解析失败 → 整站配置丢失。
+    const tmpFile = `${CONFIG_FILE}.tmp`;
+    fs.writeFileSync(tmpFile, configStr, 'utf8');
+    fs.renameSync(tmpFile, CONFIG_FILE);
     _configCache = null;
     _configCacheTime = 0;
   } catch (error) {

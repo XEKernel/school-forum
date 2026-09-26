@@ -147,7 +147,7 @@ const notificationController = {
       
       res.json(generateSuccessResponse({ updatedCount: result.modifiedCount || 0 }, `已标记所有通知为已读`));
     } catch (error) {
-      logger.logError('标记所有通知为已读失败', { error: error.message, userId: req.body.userId });
+      logger.logError('标记所有通知为已读失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },

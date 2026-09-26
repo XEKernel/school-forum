@@ -1207,7 +1207,12 @@ const notificationCache = {
     if (!isConnected) return null;
     try {
       const client = getRedisClient();
-      return await client.incr(`${this.UNREAD_PREFIX}${userId}`);
+      const key = `${this.UNREAD_PREFIX}${userId}`;
+      const count = await client.incr(key);
+      // 该 key 此前没有任何 TTL，用户不再活跃也不会被清理（永久驻留）；
+      // 补一个 90 天滑动过期兜底，未读数本身也会在标记已读时被 delete
+      await client.expire(key, 90 * 24 * 60 * 60);
+      return count;
     } catch (error) {
       return null;
     }

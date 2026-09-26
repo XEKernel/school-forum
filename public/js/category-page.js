@@ -17,6 +17,13 @@
     return params.get(name);
   }
 
+  // HTML 转义：优先用 utils.escapeHtml；utils 未加载时也要转义，
+  // 不能像旧代码那样回退原文（那是一个可被注入的降级分支）
+  const fallbackEscape = (value) => String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const esc = (value) => (window.utils ? window.utils.escapeHtml(value) : fallbackEscape(value));
+
   // 初始化
   async function initCategoryPage() {
     categoryPageState.categoryId = getUrlParam('id');
@@ -165,11 +172,12 @@
     postEl.className = 'post-item';
     postEl.dataset.id = post.id;
 
+    // utils 未加载时的兜底转义见文件顶部 esc()
     const timeDisplay = window.utils ? window.utils.formatDate(post.timestamp) : post.timestamp;
     const isLiked = currentUser && post.likedBy && post.likedBy.includes(currentUser.id);
     const likesCount = post.likes || 0;
     const commentsCount = post.comments ? post.comments.length : 0;
-    const displayUsername = post.anonymous ? '匿名用户' : (window.utils ? window.utils.escapeHtml(post.username) : post.username);
+    const displayUsername = post.anonymous ? '匿名用户' : esc(post.username);
 
     // 处理图片
     let imagesHtml = '';
@@ -186,13 +194,13 @@
             `<a href="profile.html?id=${post.userId}">${post.userAvatar ? `<img src="${post.userAvatar}" class="post-avatar">` : '<i class="fas fa-user-circle"></i>'}</a>`}
           <div class="post-user-info">
             <span class="post-username">${displayUsername}</span>
-            ${!post.anonymous ? `<span class="post-meta">${window.utils ? window.utils.escapeHtml(post.school || '') : ''} ${window.utils ? window.utils.escapeHtml(post.grade || '') : ''} ${window.utils ? window.utils.escapeHtml(post.className || '') : ''}</span>` : ''}
+            ${!post.anonymous ? `<span class="post-meta">${esc(post.school || '')} ${esc(post.grade || '')} ${esc(post.className || '')}</span>` : ''}
           </div>
         </div>
         <span class="post-time">${timeDisplay}</span>
       </div>
       <div class="post-content">
-        ${window.utils ? window.utils.escapeHtml(post.content || '') : (post.content || '')}
+        ${esc(post.content || '')}
       </div>
       ${imagesHtml}
       <div class="post-actions">
@@ -283,7 +291,7 @@
     const sidebarHtml = categories.map(cat => `
       <a href="category.html?id=${cat.id}" class="sidebar-category-item ${cat.id === categoryPageState.categoryId ? 'active' : ''}">
         <i class="fas ${cat.icon || 'fa-folder'}" style="color: ${cat.color || '#2b6cb0'}"></i>
-        <span>${window.utils ? window.utils.escapeHtml(cat.name) : cat.name}</span>
+        <span>${esc(cat.name)}</span>
         ${cat.postCount !== undefined ? `<span class="cat-count">${cat.postCount}</span>` : ''}
       </a>
     `).join('');
@@ -292,7 +300,7 @@
     const navHtml = categories.map(cat => `
       <a href="category.html?id=${cat.id}" class="category-nav-item ${cat.id === categoryPageState.categoryId ? 'active' : ''}">
         <i class="fas ${cat.icon || 'fa-folder'}" style="color: ${cat.color || '#2b6cb0'}"></i>
-        <span>${window.utils ? window.utils.escapeHtml(cat.name) : cat.name}</span>
+        <span>${esc(cat.name)}</span>
       </a>
     `).join('');
 

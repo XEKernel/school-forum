@@ -6,7 +6,8 @@ const { verificationCode, isRedisConnected } = require('./redisUtils');
 const memoryStore = new Map();
 
 // 清理过期的内存验证码（每5分钟执行一次）
-setInterval(() => {
+// .unref()：不因这个定时器把进程钉住（否则测试/子进程会一直不退出）
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, value] of memoryStore.entries()) {
     if (now - value.timestamp > 5 * 60 * 1000) {
@@ -14,6 +15,7 @@ setInterval(() => {
     }
   }
 }, 5 * 60 * 1000);
+if (typeof cleanupTimer.unref === 'function') cleanupTimer.unref();
 
 // 创建邮件传输器
 const createTransporter = () => {

@@ -265,6 +265,19 @@ if [[ -f ".env" ]]; then
     log_success ".env 已更新"
 else
     # 新建 .env
+    # JWT 密钥随机生成：此前写死 'please_run_deploy_script_first'，若使用者
+    # 直接跑 setup.sh 而没有跑 deploy.sh，全站就用这个公开的占位密钥签发令牌（可伪造）
+    gen_secret() {
+        if command -v openssl &> /dev/null; then
+            openssl rand -base64 48 | tr -d '\n'
+        else
+            # 无 openssl 时用 /dev/urandom 兜底
+            head -c 48 /dev/urandom | base64 | tr -d '\n'
+        fi
+    }
+    JWT_SECRET_VALUE="$(gen_secret)"
+    ADMIN_JWT_SECRET_VALUE="$(gen_secret)"
+
     # 先用 umask 077 建文件：.env 含 JWT 密钥与数据库口令，不能以默认 644 落盘
     # （404/644 期间任何本机用户都能读到密钥；等脚本末尾再 chmod 600 已经晚了）
     (umask 077; cat > .env <<EOF
@@ -276,10 +289,10 @@ MONGODB_URI=mongodb://localhost:27017/school-forum
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
-JWT_SECRET=please_run_deploy_script_first
+JWT_SECRET=$JWT_SECRET_VALUE
 JWT_EXPIRES_IN=7d
 JWT_REFRESH_EXPIRES_IN=30d
-ADMIN_JWT_SECRET=please_run_deploy_script_first
+ADMIN_JWT_SECRET=$ADMIN_JWT_SECRET_VALUE
 ADMIN_JWT_EXPIRES_IN=24h
 
 CORS_ORIGIN=$CORS_ORIGIN

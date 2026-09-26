@@ -460,11 +460,8 @@ const followController = {
   // 标记用户查看了关注动态（更新查看时间）
   async markFollowingViewed(req, res) {
     try {
-      const { userId } = req.body;
-
-      if (!userId) {
-        return res.status(400).json(generateErrorResponse('用户ID不能为空'));
-      }
+      // 身份只认 JWT：此前取 req.body.userId，可替任意用户清掉「新动态」提示
+      const userId = req.user.id;
 
       // 更新用户的上次查看时间
       await User.findOneAndUpdate(
@@ -476,7 +473,7 @@ const followController = {
         success: true
       }));
     } catch (error) {
-      logger.logError('标记查看动态失败', { error: error.message, userId: req.body.userId });
+      logger.logError('标记查看动态失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   }

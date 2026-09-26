@@ -161,7 +161,7 @@ const userController = {
 
       res.json(generateSuccessResponse({ email: user.email }, '验证码已发送到您的邮箱'));
     } catch (error) {
-      logger.logError('发送密码修改验证码失败', { error: error.message, userId: req.body.userId });
+      logger.logError('发送密码修改验证码失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse(error.message || '发送验证码失败', 500));
     }
   },
@@ -195,7 +195,7 @@ const userController = {
 
       res.json(generateSuccessResponse({}, '验证码验证成功'));
     } catch (error) {
-      logger.logError('验证密码修改验证码失败', { error: error.message, userId: req.body.userId });
+      logger.logError('验证密码修改验证码失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -262,7 +262,7 @@ const userController = {
 
       res.json(generateSuccessResponse({}, '密码修改成功'));
     } catch (error) {
-      logger.logError('修改密码失败', { error: error.message, userId: req.body.userId });
+      logger.logError('修改密码失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -1138,7 +1138,7 @@ const userController = {
       valid: true
     }, '用户验证通过'));
     } catch (error) {
-      logger.logError('验证用户状态失败', { error: error.message, userId: req.body.userId });
+      logger.logError('验证用户状态失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -1190,7 +1190,7 @@ const userController = {
 
       res.json(generateSuccessResponse({}, '验证码已发送到新邮箱'));
     } catch (error) {
-      logger.logError('发送邮箱修改验证码失败', { error: error.message, userId: req.body.userId });
+      logger.logError('发送邮箱修改验证码失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse(error.message || '发送验证码失败', 500));
     }
   },
@@ -1243,7 +1243,7 @@ const userController = {
 
       res.json(generateSuccessResponse({ user: safeUser }, '邮箱修改成功'));
     } catch (error) {
-      logger.logError('验证邮箱修改失败', { error: error.message, userId: req.body.userId });
+      logger.logError('验证邮箱修改失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -1313,7 +1313,7 @@ const userController = {
 
       res.json(generateSuccessResponse({ user: safeUser }, 'QQ号修改成功'));
     } catch (error) {
-      logger.logError('修改QQ号失败', { error: error.message, userId: req.body.userId });
+      logger.logError('修改QQ号失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -1583,7 +1583,7 @@ const userController = {
 
       res.json(generateSuccessResponse({}, '账户已注销'));
     } catch (error) {
-      logger.logError('注销账户失败', { error: error.message, userId: req.body.userId });
+      logger.logError('注销账户失败', { error: error.message, userId: req.user?.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
