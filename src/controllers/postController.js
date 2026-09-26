@@ -39,6 +39,18 @@ const Blacklist = require('../models/Blacklist');
 const MAX_REPLY_DEPTH = 6;
 
 /**
+ * 计数兜底修正：likes / dislikes 原子递减后若为负则归零
+ * 背景：旧实现是读-改-写且带 Math.max(0, ...)，历史丢更新可能造成
+ * 「计数已为 0 但数组里仍有记录」；原子 $pull + $inc -1 在这种情况下会减成 -1。
+ * 这里用带条件的更新把负数拉回 0，保持与旧行为一致（计数永不为负）。
+ * 注意不要与请求内的读取混用：调用后需重新取文档才能拿到修正值。
+ */
+async function clampPostCounters(postId) {
+  await Post.updateOne({ id: postId, likes: { $lt: 0 } }, { $set: { likes: 0 } });
+  await Post.updateOne({ id: postId, dislikes: { $lt: 0 } }, { $set: { dislikes: 0 } });
+}
+
+/**
  * 评论/回复富化：实时补全 userAvatar 与 replyToUsername
  * - userAvatar：评论/回复存储时未快照头像（addComment/addReply 不写该字段），
  *   这里按 userId 批量查 User 表实时补全，头像修改后无需迁移旧数据
@@ -595,58 +607,61 @@ const postController = {
   },
 
   // 点赞帖子
+  // 原子实现：原实现「读快照 → 内存算绝对值 → 整体覆盖写」，并发点赞会丢更新
+  // （两个用户同时点赞只 +1），且 likedBy 数组与 likes 计数会长期不一致。
+  // 现改为「条件过滤 + $addToSet/$pull + $inc」，每次变更都由单条 findOneAndUpdate 完成：
+  // 过滤器同时承担「前置状态判断」的职责，因此不需要先读后写。
   async likePost(req, res) {
     try {
       const postId = req.params.id;
       // userId 来自已认证的 JWT，不信任客户端传值
       const userId = req.user.id;
 
-      const post = await getPostById(postId);
+      const baseFilter = { id: postId, isDeleted: { $ne: true } };
+      // 只取响应与通知需要的字段（不回传 comments 等大数组）
+      const after = { returnDocument: 'after', projection: { userId: 1, likes: 1, dislikes: 1 } };
 
-      if (!post || post.isDeleted) {
+      // 1) 顺带清掉可能存在的点踩（过滤器不命中即无副作用；赞与踩互斥）
+      await Post.findOneAndUpdate(
+        { ...baseFilter, dislikedBy: userId },
+        { $pull: { dislikedBy: userId }, $inc: { dislikes: -1 } },
+        after
+      ).lean();
+
+      // 2) 已点赞 → 取消点赞
+      let post = await Post.findOneAndUpdate(
+        { ...baseFilter, likedBy: userId },
+        { $pull: { likedBy: userId }, $inc: { likes: -1 } },
+        after
+      ).lean();
+
+      let liked;
+      if (post) {
+        liked = false;
+        logger.logUserAction('取消点赞', userId, post.userId, { postId, currentLikes: post.likes });
+      } else {
+        // 3) 未点赞 → 加赞（$addToSet 保证不会重复加入，过滤器保证并发下不会重复计数）
+        post = await Post.findOneAndUpdate(
+          { ...baseFilter, likedBy: { $ne: userId } },
+          { $addToSet: { likedBy: userId }, $inc: { likes: 1 } },
+          after
+        ).lean();
+        liked = !!post;
+        if (post) {
+          logger.logUserAction('点赞帖子', userId, post.userId, { postId, currentLikes: post.likes });
+        } else {
+          // 并发下同一用户的两次点赞请求：两次都走到这里时后一次会因 $ne 过滤失配，
+          // 此时不写入，以库内实际状态回应
+          post = await Post.findOne(baseFilter).select('userId likes dislikes').lean();
+        }
+      }
+
+      if (!post) {
         logger.logWarn('点赞失败：帖子不存在', { postId, userId });
         return res.status(404).json(generateErrorResponse('帖子不存在'));
       }
 
-      const likedBy = post.likedBy || [];
-      const dislikedBy = post.dislikedBy || [];
-      const userIndex = likedBy.indexOf(userId);
-      const userDislikeIndex = dislikedBy.indexOf(userId);
-
-      let newLikes, newLikedBy, newDislikes, newDislikedBy, liked;
-      
-      // 如果用户已经点踩，先取消点踩
-      if (userDislikeIndex !== -1) {
-        newDislikes = Math.max(0, (post.dislikes || 0) - 1);
-        newDislikedBy = dislikedBy.filter(id => id !== userId);
-      } else {
-        newDislikes = post.dislikes || 0;
-        newDislikedBy = dislikedBy;
-      }
-      
-      // 如果用户已经点赞，则取消点赞
-      if (userIndex !== -1) {
-        newLikes = Math.max(0, post.likes - 1);
-        newLikedBy = likedBy.filter(id => id !== userId);
-        liked = false;
-
-        logger.logUserAction('取消点赞', userId, post.userId, {
-          postId,
-          currentLikes: newLikes
-        });
-      } else {
-        // 否则添加点赞
-        newLikes = post.likes + 1;
-        newLikedBy = [...likedBy, userId];
-        liked = true;
-
-        logger.logUserAction('点赞帖子', userId, post.userId, {
-          postId,
-          currentLikes: newLikes
-        });
-      }
-
-      await updatePost(postId, { likes: newLikes, likedBy: newLikedBy, dislikes: newDislikes, dislikedBy: newDislikedBy });
+      await clampPostCounters(postId);
 
       // 清除帖子缓存
       await postCache.delete(postId);
@@ -657,13 +672,13 @@ const postController = {
       }
 
       res.json(generateSuccessResponse({
-        likes: newLikes,
+        likes: Math.max(0, post.likes || 0),
         liked: liked,
-        dislikes: newDislikes,
+        dislikes: Math.max(0, post.dislikes || 0),
         disliked: false
       }, liked ? '点赞成功' : '取消点赞成功'));
     } catch (error) {
-      logger.logError('点赞操作失败', { error: error.message, postId: req.params.id, userId: req.body.userId });
+      logger.logError('点赞操作失败', { error: error.message, postId: req.params.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -675,64 +690,61 @@ const postController = {
       // userId 来自已认证的 JWT，不信任客户端传值
       const userId = req.user.id;
 
-      const post = await getPostById(postId);
+      const baseFilter = { id: postId, isDeleted: { $ne: true } };
+      const after = { returnDocument: 'after', projection: { userId: 1, likes: 1, dislikes: 1 } };
 
-      if (!post || post.isDeleted) {
+      // 1) 顺带清掉可能存在的点赞（过滤器不命中即无副作用；赞与踩互斥）
+      await Post.findOneAndUpdate(
+        { ...baseFilter, likedBy: userId },
+        { $pull: { likedBy: userId }, $inc: { likes: -1 } },
+        after
+      ).lean();
+
+      // 2) 已点踩 → 取消点踩
+      let post = await Post.findOneAndUpdate(
+        { ...baseFilter, dislikedBy: userId },
+        { $pull: { dislikedBy: userId }, $inc: { dislikes: -1 } },
+        after
+      ).lean();
+
+      let disliked;
+      if (post) {
+        disliked = false;
+        logger.logUserAction('取消点踩', userId, post.userId, { postId, currentDislikes: post.dislikes });
+      } else {
+        // 3) 未点踩 → 点踩（$addToSet + 过滤器保证并发下不重复计数）
+        post = await Post.findOneAndUpdate(
+          { ...baseFilter, dislikedBy: { $ne: userId } },
+          { $addToSet: { dislikedBy: userId }, $inc: { dislikes: 1 } },
+          after
+        ).lean();
+        disliked = !!post;
+        if (post) {
+          logger.logUserAction('点踩帖子', userId, post.userId, { postId, currentDislikes: post.dislikes });
+        } else {
+          // 并发下同一用户的两次点踩请求：不写入，以库内实际状态回应
+          post = await Post.findOne(baseFilter).select('userId likes dislikes').lean();
+        }
+      }
+
+      if (!post) {
         logger.logWarn('点踩失败：帖子不存在', { postId, userId });
         return res.status(404).json(generateErrorResponse('帖子不存在'));
       }
 
-      const likedBy = post.likedBy || [];
-      const dislikedBy = post.dislikedBy || [];
-      const userIndex = dislikedBy.indexOf(userId);
-      const userLikeIndex = likedBy.indexOf(userId);
-
-      let newDislikes, newDislikedBy, newLikes, newLikedBy, disliked;
-      
-      // 如果用户已经点赞，先取消点赞
-      if (userLikeIndex !== -1) {
-        newLikes = Math.max(0, post.likes - 1);
-        newLikedBy = likedBy.filter(id => id !== userId);
-      } else {
-        newLikes = post.likes || 0;
-        newLikedBy = likedBy;
-      }
-      
-      // 如果用户已经点踩，则取消点踩
-      if (userIndex !== -1) {
-        newDislikes = Math.max(0, (post.dislikes || 0) - 1);
-        newDislikedBy = dislikedBy.filter(id => id !== userId);
-        disliked = false;
-
-        logger.logUserAction('取消点踩', userId, post.userId, {
-          postId,
-          currentDislikes: newDislikes
-        });
-      } else {
-        // 否则添加点踩
-        newDislikes = (post.dislikes || 0) + 1;
-        newDislikedBy = [...dislikedBy, userId];
-        disliked = true;
-
-        logger.logUserAction('点踩帖子', userId, post.userId, {
-          postId,
-          currentDislikes: newDislikes
-        });
-      }
-
-      await updatePost(postId, { likes: newLikes, likedBy: newLikedBy, dislikes: newDislikes, dislikedBy: newDislikedBy });
+      await clampPostCounters(postId);
 
       // 清除帖子缓存
       await postCache.delete(postId);
 
       res.json(generateSuccessResponse({
-        dislikes: newDislikes,
+        dislikes: Math.max(0, post.dislikes || 0),
         disliked: disliked,
-        likes: newLikes,
+        likes: Math.max(0, post.likes || 0),
         liked: false
       }, disliked ? '点踩成功' : '取消点踩成功'));
     } catch (error) {
-      logger.logError('点踩操作失败', { error: error.message, postId: req.params.id, userId: req.body.userId });
+      logger.logError('点踩操作失败', { error: error.message, postId: req.params.id });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
   },
@@ -812,21 +824,27 @@ const postController = {
         timestamp: new Date().toISOString()
       };
 
-      const comments = post.comments || [];
-      comments.unshift(newComment);
+      // 原子前插：$push + $position:0。
+      // 原实现是「读全量 comments → unshift → 整体覆盖写」，两个用户同时评论会互相覆盖（丢评论）。
+      // $position:0 与旧行为的顺序一致（新评论在最前）；最后再用一次条件更新兜住「读取后被删帖」的竞态。
+      const appended = await Post.findOneAndUpdate(
+        { id: postId, isDeleted: { $ne: true } },
+        { $push: { comments: { $each: [newComment], $position: 0 } } },
+        { returnDocument: 'after', projection: { id: 1 } }
+      ).lean();
 
-      await updatePost(postId, { comments });
+      if (!appended) {
+        logger.logWarn('添加评论失败：帖子已被删除', { postId, userId });
+        return res.status(404).json(generateErrorResponse('帖子不存在'));
+      }
 
       // 清除帖子缓存
       await postCache.delete(postId);
 
-      // 更新用户评论数
-      const user = await getUserById(userId);
-      if (user) {
-        await updateUser(userId, { commentCount: (user.commentCount || 0) + 1 });
-        // 清除用户缓存
-        await userCache.delete(userId);
-      }
+      // 更新用户评论数（$inc 原子自增；原实现「读 + 1 再整体覆盖写」同样会丢更新）
+      await updateUser(userId, { $inc: { commentCount: 1 } });
+      // 清除用户缓存
+      await userCache.delete(userId);
 
       // 记录添加评论日志
       logger.logUserAction('添加评论', userId, username, {
