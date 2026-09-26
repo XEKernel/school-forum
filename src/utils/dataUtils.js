@@ -213,15 +213,18 @@ async function markBroadcastAsRead(notificationId, userId) {
 
 // 标记所有通知为已读（个人通知 read=true；广播通知 readBy 追加当前用户）
 async function markAllNotificationsAsRead(userId) {
-  await Notification.updateMany(
+  const personal = await Notification.updateMany(
     { userId, read: false },
     { read: true }
   );
-  await Notification.updateMany(
+  const broadcast = await Notification.updateMany(
     { target: 'all' },
     { $addToSet: { readBy: userId } }
   );
-  return { modifiedCount: 1 };
+  // 返回真实影响条数：此前硬编码 { modifiedCount: 1 }，前端显示的"已更新 N 条"是假的
+  return {
+    modifiedCount: (personal.modifiedCount || 0) + (broadcast.modifiedCount || 0)
+  };
 }
 
 // 获取未读通知数量（个人未读 + 当前用户未读的广播通知）

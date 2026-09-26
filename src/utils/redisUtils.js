@@ -933,7 +933,7 @@ const postCounters = {
     if (!isConnected) return null;
     try {
       const client = getRedisClient();
-      const key = ``;
+      const key = `${this.LIKES_PREFIX}${postId}`;
       const val = await client.incr(key);
       await client.expire(key, this.EXPIRE_TIME);
       return val;
@@ -949,7 +949,7 @@ const postCounters = {
     if (!isConnected) return null;
     try {
       const client = getRedisClient();
-      const key = ``;
+      const key = `${this.LIKES_PREFIX}${postId}`;
       const val = await client.decr(key);
       await client.expire(key, this.EXPIRE_TIME);
       return val;
@@ -993,7 +993,7 @@ const postCounters = {
     if (!isConnected) return null;
     try {
       const client = getRedisClient();
-      const key = ``;
+      const key = `${this.DISLIKES_PREFIX}${postId}`;
       const val = await client.incr(key);
       await client.expire(key, this.EXPIRE_TIME);
       return val;
@@ -1009,7 +1009,7 @@ const postCounters = {
     if (!isConnected) return null;
     try {
       const client = getRedisClient();
-      const key = ``;
+      const key = `${this.DISLIKES_PREFIX}${postId}`;
       const val = await client.decr(key);
       await client.expire(key, this.EXPIRE_TIME);
       return val;
@@ -1039,7 +1039,7 @@ const postCounters = {
     if (!isConnected) return null;
     try {
       const client = getRedisClient();
-      const key = ``;
+      const key = `${this.VIEWS_PREFIX}${postId}`;
       const val = await client.incr(key);
       await client.expire(key, this.EXPIRE_TIME);
       return val;
@@ -1055,7 +1055,7 @@ const postCounters = {
     if (!isConnected) return false;
     try {
       const client = getRedisClient();
-      await client.setEx(``, this.EXPIRE_TIME, count.toString());
+      await client.setEx(`${this.VIEWS_PREFIX}${postId}`, this.EXPIRE_TIME, count.toString());
       return true;
     } catch (error) {
       return false;

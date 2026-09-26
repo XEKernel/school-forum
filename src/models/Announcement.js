@@ -93,13 +93,11 @@ announcementSchema.statics.getActiveAnnouncements = async function(position = nu
   
   const query = {
     isActive: true,
-    $or: [
-      { startTime: null },
-      { startTime: { $lte: now } }
-    ],
-    $or: [
-      { endTime: null },
-      { endTime: { $gte: now } }
+    // 两个时间条件必须放进 $and：在同一对象字面量里写两次 $or 时，
+    // 后一个会静默覆盖前一个，导致 startTime 过滤失效、未生效的公告被提前展示
+    $and: [
+      { $or: [{ startTime: null }, { startTime: { $lte: now } }] },
+      { $or: [{ endTime: null }, { endTime: { $gte: now } }] }
     ]
   };
   

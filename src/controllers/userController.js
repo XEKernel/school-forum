@@ -1446,7 +1446,9 @@ const userController = {
         await Favorite.deleteMany({ userId });
         
         // 删除用户的黑名单
-        await Blacklist.deleteMany({ $or: [{ blocker: userId }, { blocked: userId }] });
+        // 字段名是 blockerId / blockedId（见 models/Blacklist.js），
+        // 此前写成 blocker / blocked 两个分支都不匹配，导致注销后拉黑记录一行都删不掉
+        await Blacklist.deleteMany({ $or: [{ blockerId: userId }, { blockedId: userId }] });
       } else {
         // 保留数据但匿名化帖子
         await Post.updateMany(
@@ -1454,8 +1456,7 @@ const userController = {
           { 
             $set: { 
               userId: 'deleted_' + userId,
-              username: '已注销用户',
-              userAvatar: null
+              username: '已注销用户'
             } 
           }
         );
@@ -1465,10 +1466,14 @@ const userController = {
       await Follow.deleteMany({ $or: [{ followerId: userId }, { followingId: userId }] });
       
       // 删除通知
-      await Notification.deleteMany({ $or: [{ recipientId: userId }, { senderId: userId }] });
+      // Notification 的字段是 userId（接收者）/ fromUserId（触发者），
+      // 此前用的 recipientId / senderId 不存在 → 通知一条都删不掉
+      await Notification.deleteMany({ $or: [{ userId }, { fromUserId: userId }] });
       
       // 删除消息和会话
-      await Message.deleteMany({ $or: [{ senderId: userId }, { recipientId: userId }] });
+      // Message 的字段是 senderId / receiverId，
+      // 此前把接收侧写成 recipientId → 别人发来的私信在注销后仍留在库里（隐私残留）
+      await Message.deleteMany({ $or: [{ senderId: userId }, { receiverId: userId }] });
       await Conversation.deleteMany({ participants: userId });
       
       // 删除用户头像文件
@@ -1715,32 +1720,42 @@ const userController = {
       }
 
       // 私信会话列表
+      // 修正：Conversation 的字段是 updatedAt + lastMessage 子文档，
+      // 不存在 lastMessageAt / messageCount（此前排序是空操作、导出值恒为 undefined）
       if (want('messages')) {
         const Conversation = require('../models/Conversation');
         const conversations = await Conversation.find({
           participants: user.id
-        }).sort({ lastMessageAt: -1 }).lean();
+        }).sort({ updatedAt: -1 }).lean();
         exportResult.conversations = conversations.map(c => ({
           id: c.id,
           participants: c.participants,
-          lastMessageAt: c.lastMessageAt,
-          messageCount: c.messageCount || 0
+          updatedAt: c.updatedAt,
+          lastMessage: c.lastMessage || null
         }));
       }
 
       // 通知记录
+      // 修正：字段为 userId / fromUserId / read / timestamp，
+      // 不存在 recipientId / senderId / isRead / createdAt（此前导出恒为空数组 + 全 null 字段）
       if (want('notifications')) {
         const Notification = require('../models/Notification');
-        const notifications = await Notification.find({ recipientId: user.id })
-          .sort({ createdAt: -1 })
+        const notifications = await Notification.find({
+          $or: [{ userId: user.id }, { target: 'all' }]
+        })
+          .sort({ timestamp: -1 })
           .limit(200)
           .lean();
         exportResult.notifications = notifications.map(n => ({
           type: n.type,
-          senderId: n.senderId,
-          content: n.content,
-          isRead: n.isRead,
-          createdAt: n.createdAt
+          target: n.target,
+          fromUserId: n.fromUserId || null,
+          content: n.content || n.message || null,
+          // 广播通知的已读状态按用户记录在 readBy 里，个人通知用 read
+          read: n.target === 'all'
+            ? (Array.isArray(n.readBy) ? n.readBy.includes(user.id) : false)
+            : !!n.read,
+          timestamp: n.timestamp
         }));
       }
 

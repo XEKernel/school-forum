@@ -16,6 +16,11 @@ const {
 } = require('../utils/validationUtils');
 const { notificationCache } = require('../utils/redisUtils');
 const logger = require('../utils/logger');
+// Notification 模型：评论 / 评论回复 / 评论点赞 三类通知直接使用该模型做去重与更新。
+// 此前这三处只在函数体内部 require 且写在了引用之后（或从 dataUtils 解构了一个
+// 并不存在的导出），导致必然抛出 "Notification is not defined" 并被 catch 静默吞掉，
+// 表现为"评论了但对方收不到通知"。改为模块级统一导入。
+const Notification = require('../models/Notification');
 
 // 检查用户是否启用了某类通知
 async function isNotificationEnabled(userId, notificationType) {
@@ -238,7 +243,6 @@ const notificationController = {
       
       if (existingNotification) {
         // 如果已存在未读通知，更新时间戳和内容
-        const { Notification } = require('../utils/dataUtils');
         await Notification.findOneAndUpdate(
           { id: existingNotification.id },
           { timestamp: new Date(), content: commentContent }
@@ -305,7 +309,6 @@ const notificationController = {
       
       if (existingNotification) {
         // 如果已存在未读通知，更新时间戳和内容
-        const { Notification } = require('../utils/dataUtils');
         await Notification.findOneAndUpdate(
           { id: existingNotification.id },
           { timestamp: new Date(), content: replyContent }
@@ -384,7 +387,6 @@ const notificationController = {
       
       if (existingNotification) {
         // 如果已存在未读通知，更新时间戳
-        const { Notification } = require('../utils/dataUtils');
         await Notification.findOneAndUpdate(
           { id: existingNotification.id },
           { timestamp: new Date() }
