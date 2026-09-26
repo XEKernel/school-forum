@@ -20,7 +20,7 @@ const {
   generateSuccessResponse
 } = require('../utils/validationUtils');
 const { getPaginationConfig } = require('../config/constants');
-const { postCache } = require('../utils/redisUtils');
+const { postCache, userCache } = require('../utils/redisUtils');
 const logger = require('../utils/logger');
 const Post = require('../models/Post');
 const User = require('../models/User');
@@ -122,9 +122,16 @@ const adminController = {
       });
       
       // 更新用户发帖数
-      const user = await getUserById(post.userId);
-      if (user) {
-        await updateUser(post.userId, { postCount: Math.max(0, (user.postCount || 0) - 1) });
+      // 两点修正：
+      // 1) 帖子若已被作者软删（作者软删时已扣过一次），这里必须跳过，否则重复扣减
+      // 2) 改成带条件的原子 $inc（postCount > 0 才扣），不再「读-改-写」覆盖，
+      //    避免并发下丢失其他帖子的计数变更
+      if (!post.isDeleted) {
+        await User.updateOne(
+          { id: post.userId, postCount: { $gt: 0 } },
+          { $inc: { postCount: -1 } }
+        );
+        await userCache.delete(post.userId);
       }
       
       // 发送系统通知给帖子作者
