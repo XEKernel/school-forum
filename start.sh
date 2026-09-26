@@ -35,6 +35,11 @@ start_dep_via_docker() {
         log_info "通过 docker compose 启动 $svc ..."
         docker compose up -d 2>/dev/null && return 0
     fi
+    # 容器不存在时不要盲目 docker start（此前对不存在的 forum-redis 也会尝试一次，
+    # 报错噪音且掩盖了「compose 里根本没有 redis 服务」这个事实）
+    if ! docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx "$svc"; then
+        return 1
+    fi
     docker start "$svc" 2>/dev/null && return 0
     return 1
 }
@@ -127,8 +132,9 @@ fi
 log_info "检查 Redis 状态..."
 REDIS_OK=false
 
-# 若未运行，尝试用 Docker 拉起 Redis（如 docker-compose 中包含 redis 服务）
-start_dep_via_docker forum-redis 6379 || true
+# 若未运行，尝试用 Docker 拉起 Redis（容器名按常见命名依次探测；
+# docker-compose.yml 中并没有 redis 服务，这里的探测失败会安静跳过）
+start_dep_via_docker forum-redis 6379 || start_dep_via_docker redis 6379 || start_dep_via_docker redis-server 6379 || true
 
 # 检测 Redis 客户端是否存在
 if command -v redis-cli &> /dev/null; then
@@ -192,16 +198,20 @@ echo "========================================================"
 echo ""
 
 # 使用 exec 替换当前进程，方便信号传递
-if ! node server.js; then
-    EXIT_CODE=$?
+# 注意不要写成 `if ! node server.js; then EXIT_CODE=$?`：
+# `!` 取反后 $? 恒为 0，错误码永远显示 0（掩盖真实失败原因）
+node server.js
+EXIT_CODE=$?
+if [ "$EXIT_CODE" -ne 0 ]; then
     echo ""
     log_error "服务启动失败，错误码: $EXIT_CODE"
     echo "常见问题排查："
     echo "  1. 检查 .env 配置是否正确（尤其是数据库连接）"
     echo "  2. 确认 MongoDB 服务已启动并可访问"
-    echo "  3. 确认端口未被占用（默认 3000）"
+    PORT_HINT="$(grep -E '^PORT=' .env 2>/dev/null | head -1 | cut -d= -f2 | tr -d '[:space:]')"
+    echo "  3. 确认端口未被占用（当前配置端口: ${PORT_HINT:-2080}）"
     echo "  4. 查看上方错误日志获取详细信息"
-    exit $EXIT_CODE
+    exit "$EXIT_CODE"
 fi
 
 # 正常情况下不会执行到这里（node 会持续运行直到被终止）

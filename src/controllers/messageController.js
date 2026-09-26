@@ -347,6 +347,11 @@ const messageController = {
         return res.status(400).json(generateErrorResponse('缺少必要参数'));
       }
 
+      // 只能以本人身份查询（接口会返回关注/拉黑关系，不能当关系枚举器用）
+      if (senderId !== req.user.id) {
+        return res.status(403).json(generateErrorResponse('无权查询他人的会话权限', 403));
+      }
+
       const conversationId = Message.getConversationId(senderId, receiverId);
       const result = await messageController.checkCanSendMessage(senderId, receiverId, conversationId);
 

@@ -95,12 +95,9 @@ const favoriteController = {
   // 检查是否已收藏
   async checkFavorite(req, res) {
     try {
-      const { userId } = req.query;
+      // 身份只认 JWT：此前从 query 取 userId，未登录也能查任意用户的收藏关系（关系枚举）
+      const userId = req.user.id;
       const postId = req.params.postId;
-
-      if (!userId) {
-        return res.json(generateSuccessResponse({ favorited: false }));
-      }
 
       const favorite = await Favorite.findOne({ userId, postId });
       

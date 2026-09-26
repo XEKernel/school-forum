@@ -379,20 +379,76 @@ async function invalidateToken(token, isAdmin = false) {
 }
 
 /**
+ * 登录失败计数的进程内兜底（Redis 不可用或报错时使用）
+ *
+ * 降级策略统一：验证码（captchaCache）同样会在 Redis 异常时退到内存，
+ * 这里保持一致 —— 既不因为 Redis 抖动就放行暴力破解（fail-open 丢保护），
+ * 也不因为 Redis 抖动就把所有人锁在门外（fail-closed 丢可用性），
+ * 而是退到单进程内计数，Redis 恢复后自动回到以 Redis 为准。
+ * ⚠ 多实例部署时各实例计数不共享，暴力破解防护会按实例数削弱，生产多实例请确保 Redis 可用。
+ */
+const memoryLoginAttempts = new Map(); // identifier -> { count, expiresAt }
+const MEMORY_ATTEMPTS_MAX_ENTRIES = 10000;
+
+function pruneMemoryAttempts(now) {
+  if (memoryLoginAttempts.size < MEMORY_ATTEMPTS_MAX_ENTRIES) return;
+  for (const [key, entry] of memoryLoginAttempts) {
+    if (entry.expiresAt <= now) memoryLoginAttempts.delete(key);
+  }
+  // 仍超上限则直接清空（宁可丢计数也不无限占用内存）
+  if (memoryLoginAttempts.size >= MEMORY_ATTEMPTS_MAX_ENTRIES) memoryLoginAttempts.clear();
+}
+
+function memoryRecordFailure(identifier, lockMs) {
+  const now = Date.now();
+  pruneMemoryAttempts(now);
+  const prev = memoryLoginAttempts.get(identifier);
+  const count = (prev && prev.expiresAt > now ? prev.count : 0) + 1;
+  memoryLoginAttempts.set(identifier, { count, expiresAt: now + lockMs });
+  return count;
+}
+
+function memoryCheckLocked(identifier, maxAttempts) {
+  const entry = memoryLoginAttempts.get(identifier);
+  if (!entry) return { locked: false };
+  if (entry.expiresAt <= Date.now()) {
+    memoryLoginAttempts.delete(identifier);
+    return { locked: false };
+  }
+  if (entry.count >= maxAttempts) {
+    return { locked: true, lockTimeRemaining: entry.expiresAt - Date.now() };
+  }
+  return { locked: false };
+}
+
+/**
  * 登录失败追踪
  */
 async function recordLoginAttempt(identifier, success, ip) {
+  const LOGIN_SECURITY = getDynamicLoginSecurity();
+
+  // getRedisClient 在 try 内调用：Redis 不可用时退到进程内计数（见文件头降级策略说明）
   try {
-    // getRedisClient 在 try 内调用：Redis 不可用时返回放行，避免登录接口 500
     const redis = getRedisClient();
-    if (!redis) return { allowed: true };
-    
-    const LOGIN_SECURITY = getDynamicLoginSecurity();
+    if (!redis) {
+      if (success) {
+        memoryLoginAttempts.delete(identifier);
+        return { allowed: true };
+      }
+      const count = memoryRecordFailure(identifier, LOGIN_SECURITY.lockTime);
+      if (count >= LOGIN_SECURITY.maxAttempts) {
+        logger.logSecurityEvent('account_locked', { identifier, ip, attempts: count, source: 'memory' });
+        return { allowed: false, attempts: count, lockTimeRemaining: LOGIN_SECURITY.lockTime };
+      }
+      return { allowed: true, attempts: count, remaining: LOGIN_SECURITY.maxAttempts - count };
+    }
+
     const key = `${LOGIN_SECURITY.redisPrefix}${identifier}`;
   
     if (success) {
       // 登录成功，清除失败记录
       await redis.del(key);
+      memoryLoginAttempts.delete(identifier);
       return { allowed: true };
     }
     
@@ -431,8 +487,16 @@ async function recordLoginAttempt(identifier, success, ip) {
       remaining: LOGIN_SECURITY.maxAttempts - attempts
     };
   } catch (error) {
-    logger.logError('记录登录尝试失败', { error: error.message });
-    return { allowed: true };
+    logger.logError('记录登录尝试失败，退到进程内计数', { error: error.message });
+    if (success) {
+      memoryLoginAttempts.delete(identifier);
+      return { allowed: true };
+    }
+    const count = memoryRecordFailure(identifier, LOGIN_SECURITY.lockTime);
+    if (count >= LOGIN_SECURITY.maxAttempts) {
+      return { allowed: false, attempts: count, lockTimeRemaining: LOGIN_SECURITY.lockTime };
+    }
+    return { allowed: true, attempts: count, remaining: LOGIN_SECURITY.maxAttempts - count };
   }
 }
 
@@ -440,12 +504,13 @@ async function recordLoginAttempt(identifier, success, ip) {
  * 检查登录是否被锁定
  */
 async function checkLoginLocked(identifier) {
+  const LOGIN_SECURITY = getDynamicLoginSecurity();
+
   try {
-    // getRedisClient 在 try 内调用：Redis 不可用时视为未锁定，避免登录接口 500
+    // getRedisClient 在 try 内调用：Redis 不可用时退到进程内计数（与 recordLoginAttempt 一致）
     const redis = getRedisClient();
-    if (!redis) return { locked: false };
-    
-    const LOGIN_SECURITY = getDynamicLoginSecurity();
+    if (!redis) return memoryCheckLocked(identifier, LOGIN_SECURITY.maxAttempts);
+
     const key = `${LOGIN_SECURITY.redisPrefix}${identifier}`;
     const attempts = await redis.get(key);
     
@@ -459,8 +524,8 @@ async function checkLoginLocked(identifier) {
     
     return { locked: false };
   } catch (error) {
-    logger.logError('检查登录锁定失败', { error: error.message });
-    return { locked: false };
+    logger.logError('检查登录锁定失败，退到进程内计数', { error: error.message });
+    return memoryCheckLocked(identifier, LOGIN_SECURITY.maxAttempts);
   }
 }
 

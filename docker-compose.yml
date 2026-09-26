@@ -6,6 +6,16 @@
 # 启动：在 WSL 里  cd ~/project/school-forum  &&  docker compose up -d
 # 停止：docker compose down            （数据保留在命名卷 mongodb44-data 中）
 # 查看日志：docker compose logs -f mongodb
+#
+# ⚠ 安全说明（部署到公网机器前请逐条确认）：
+#   1. 端口只绑定到宿主机回环（127.0.0.1），外网无法直连 27017（此前是 0.0.0.0 全网可达 + 无鉴权 = 库被拖走）
+#   2. 若需要多机访问 MongoDB，必须同时启用下面的账号密码鉴权，并把连接串改成
+#      mongodb://root:密码@localhost:27017/school-forum?authSource=admin
+#   3. Redis 不在本 compose 中：若用系统包安装，保持默认 bind 127.0.0.1 + protected-mode yes，
+#      并在 .env 设置 REDIS_PASSWORD（应用已支持）；不要把 6379 暴露到公网
+#   4. 对外提供服务请跑在 TLS 终止之后（Nginx/Caddy 反代 HTTPS），Node 只监听回环；
+#      同时在 后台 → 安全设置（data/config.json 的 security 段）把 allowHTTP 设为 false、
+#      hstsEnabled 设为 true，并把 .env 的 CORS_ORIGIN 改成 https://你的域名
 
 services:
   mongodb:
@@ -13,14 +23,15 @@ services:
     container_name: mongodb44
     restart: unless-stopped
     ports:
-      - "27017:27017"
+      # 仅绑定宿主机回环：容器内端口不改，端口发布限制在 127.0.0.1
+      - "127.0.0.1:27017:27017"
     volumes:
       # 用命名卷而非绑定目录，规避 WSL 权限/9P 性能问题，数据持久化且高性能
       - mongodb44-data:/data/db
     # 限制 WiredTiger 内存占用，避免在你 8GB 的 WSL 里吃满内存
     command: ["mongod", "--wiredTigerCacheSizeGB", "1.5"]
-    # 可选：如需账号密码鉴权，取消下面注释并改成你自己的密码，
-    #       之后项目连接串需带上账号，如 mongodb://root:密码@localhost:27017
+    # 启用鉴权：取消下面注释并改成你自己的密码，之后项目连接串需带上账号
+    # （见文件顶部说明第 2 条）
     # environment:
     #   MONGO_INITDB_ROOT_USERNAME: root
     #   MONGO_INITDB_ROOT_PASSWORD: 你的密码

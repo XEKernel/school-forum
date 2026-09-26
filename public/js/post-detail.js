@@ -232,7 +232,11 @@ const postDetailManager = {
       const currentUser = userManager.state.currentUser;
       if (!currentUser) return false;
 
-      const response = await fetch(`/api/favorites/check/${this.postId}`);
+      // 路由是 GET /api/favorites/:postId/check（此前写成 /api/favorites/check/:postId → 永远 404，
+      // 收藏按钮状态因此从来没被正确回填过）
+      const response = await fetch(`/api/favorites/${this.postId}/check`, {
+        headers: userManager.getAuthHeaders()
+      });
       const data = await response.json();
       
       if (data.success) {

@@ -171,7 +171,7 @@ fi
 # ==================== 收集配置 ====================
 ADMIN_USERS_ARRAY=()
 SERVER_IP=""
-CORS_ORIGIN="http://localhost:3000"
+CORS_ORIGIN="http://localhost:2080"
 SMTP_HOST=""
 SMTP_PORT=""
 SMTP_USER=""
@@ -265,9 +265,11 @@ if [[ -f ".env" ]]; then
     log_success ".env 已更新"
 else
     # 新建 .env
-    cat > .env <<EOF
+    # 先用 umask 077 建文件：.env 含 JWT 密钥与数据库口令，不能以默认 644 落盘
+    # （404/644 期间任何本机用户都能读到密钥；等脚本末尾再 chmod 600 已经晚了）
+    (umask 077; cat > .env <<EOF
 # 校园论坛环境配置
-PORT=3000
+PORT=2080
 NODE_ENV=production
 
 MONGODB_URI=mongodb://localhost:27017/school-forum
@@ -282,6 +284,7 @@ ADMIN_JWT_EXPIRES_IN=24h
 
 CORS_ORIGIN=$CORS_ORIGIN
 EOF
+    )
     [[ -n "$SERVER_IP" ]] && echo "SERVER_IP=$SERVER_IP" >> .env
     [[ -n "$SMTP_HOST" ]] && cat >> .env <<EOF
 SMTP_HOST=$SMTP_HOST
@@ -289,7 +292,8 @@ SMTP_PORT=$SMTP_PORT
 SMTP_USER=$SMTP_USER
 SMTP_PASS=$SMTP_PASS
 EOF
-    log_success ".env 已创建"
+    chmod 600 .env 2>/dev/null || true
+    log_success ".env 已创建（权限 600）"
 fi
 
 # 更新 data/config.json
@@ -338,6 +342,14 @@ EOF
     fi
 else
     log_info "管理员未修改，跳过 data/config.json"
+fi
+
+# 配置文件权限收口：.env 与 data/config.json 都含 JWT 密钥/数据库口令，统一收敛到 600
+if [[ -f ".env" ]]; then
+    chmod 600 ".env" 2>/dev/null || true
+fi
+if [[ -f "data/config.json" ]]; then
+    chmod 600 "data/config.json" 2>/dev/null || true
 fi
 
 # 最终提示

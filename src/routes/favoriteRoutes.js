@@ -42,8 +42,8 @@ router.post('/favorites/:postId', authenticateUser, favoriteController.addFavori
 // 取消收藏
 router.delete('/favorites/:postId', authenticateUser, favoriteController.removeFavorite);
 
-// 检查是否已收藏 — 无需认证（未登录返回 false）
-router.get('/favorites/:postId/check', favoriteController.checkFavorite);
+// 检查是否已收藏 — 需登录（此前用 query 里的 userId，未登录即可枚举任意用户的收藏关系）
+router.get('/favorites/:postId/check', authenticateUser, favoriteController.checkFavorite);
 
 // 更新收藏的标签
 router.put('/favorites/:postId/tag', authenticateUser, favoriteController.updateFavoriteTag);

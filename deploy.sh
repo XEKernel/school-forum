@@ -824,7 +824,9 @@ configure_project() {
         esc_smtp_pass=$(esc_env "$smtp_pass")
         esc_cors_origin=$(esc_env "$cors_origin")
         esc_server_ip=$(esc_env "${server_ip:-}")
-        cat > .env <<EOF
+        # umask 077 建文件：.env 含 JWT 密钥与数据库口令，不能先以 644 落盘再等脚本末尾 chmod
+        # （中途中断就永久停在 644，任何本机用户可读）
+        (umask 077; cat > .env <<EOF
 # ===========================================
 # 校园论坛运行配置（由部署脚本自动生成）
 # ===========================================
@@ -878,7 +880,9 @@ PASSWORD_REQUIRE_SPECIAL=false
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX_REQUESTS=100
 EOF
-        log_success ".env 已生成"
+        )
+        chmod 600 .env 2>/dev/null || true
+        log_success ".env 已生成（权限 600）"
     else
         log_info "保留现有 .env 文件"
     fi
@@ -989,7 +993,8 @@ EOF
         esc_mongodb_uri=$(esc_env "$mongodb_uri")
         esc_mongodb_password=$(esc_env "$mongodb_password")
         esc_redis_password=$(esc_env "$redis_password")
-        cat > data/config.json <<EOF
+        # 同样用 umask 077：config.json 里含 MongoDB/Redis 口令
+        (umask 077; cat > data/config.json <<EOF
 {
   "adminUsers": $admin_users_json,
   "mongodb": {
@@ -1026,7 +1031,9 @@ EOF
   "schools": $schools_json
 }
 EOF
-        log_success "data/config.json 已生成"
+        )
+        chmod 600 data/config.json 2>/dev/null || true
+        log_success "data/config.json 已生成（权限 600）"
         # 验证 JSON 合法性
         if command -v jq &> /dev/null; then
             if ! jq empty data/config.json 2>/dev/null; then

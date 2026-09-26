@@ -1,6 +1,7 @@
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const fs = require('fs');
 const { IMAGES_DIR, getUploadConfig } = require('../config/constants');
 
 // multer 存储配置
@@ -101,8 +102,79 @@ function processUploadedFiles(files) {
   }));
 }
 
+// ==================== 魔术字节（文件头）校验 ====================
+// fileFilter 读的是客户端声明的 originalname 与 mimetype，两者都能伪造：
+// 把任意内容改名成 .png 并声明 image/png 就能落盘。这里在落盘后读真实文件头，
+// 命中不匹配即删除全部已上传文件并返回 400。
+const MAGIC_HEAD_BYTES = 16;
+
+const ISO_BMFF_BRANDS = ['avif', 'avis', 'heic', 'heix', 'hevc', 'hevm', 'hevs', 'heis', 'mif1', 'msf1'];
+
+const MAGIC_RULES = {
+  '.jpg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  '.jpeg': (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  '.png': (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  '.gif': (b) => {
+    const sig = b.subarray(0, 6).toString('latin1');
+    return sig === 'GIF87a' || sig === 'GIF89a';
+  },
+  '.webp': (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+  '.bmp': (b) => b[0] === 0x42 && b[1] === 0x4d,
+  '.avif': (b) => isIsoBmff(b),
+  '.heic': (b) => isIsoBmff(b),
+  '.heif': (b) => isIsoBmff(b)
+};
+
+function isIsoBmff(buf) {
+  if (buf.subarray(4, 8).toString('latin1') !== 'ftyp') return false;
+  return ISO_BMFF_BRANDS.includes(buf.subarray(8, 12).toString('latin1'));
+}
+
+async function readHead(filePath, length) {
+  const fh = await fs.promises.open(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(length);
+    const { bytesRead } = await fh.read(buf, 0, length, 0);
+    return buf.subarray(0, bytesRead);
+  } finally {
+    await fh.close();
+  }
+}
+
+/**
+ * 校验上传文件的真实类型（必须挂在 multer 之后）
+ * 不匹配时删除本次请求已落盘的所有文件，避免残留孤立图片
+ */
+async function verifyImageMagicBytes(req, res, next) {
+  const files = [...(Array.isArray(req.files) ? req.files : []), ...(req.file ? [req.file] : [])];
+  if (files.length === 0) return next();
+
+  try {
+    for (const file of files) {
+      const ext = path.extname(file.filename || file.path || '').toLowerCase();
+      const rule = MAGIC_RULES[ext];
+      const head = await readHead(file.path, MAGIC_HEAD_BYTES);
+
+      if (!rule || head.length < 12 || !rule(head)) {
+        await Promise.all(files.map(f =>
+          fs.promises.unlink(f.path).catch(() => {})
+        ));
+        return res.status(400).json({
+          success: false,
+          message: '图片内容与文件格式不符，请上传真实的 JPG/PNG/GIF/WebP 图片'
+        });
+      }
+    }
+    next();
+  } catch (error) {
+    await Promise.all(files.map(f => fs.promises.unlink(f.path).catch(() => {})));
+    next(error);
+  }
+}
+
 module.exports = {
   upload,
   createUploadMiddleware,
-  processUploadedFiles
+  processUploadedFiles,
+  verifyImageMagicBytes
 };

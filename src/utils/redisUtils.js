@@ -1523,19 +1523,7 @@ const captchaCache = {
    */
   async verify(captchaId, inputCode) {
     if (!isConnected) {
-      // 内存 fallback
-      if (!this._memoryStore) return { valid: false, message: '验证码已过期' };
-      const entry = this._memoryStore.get(captchaId);
-      if (!entry) return { valid: false, message: '验证码已过期' };
-      if (Date.now() > entry.expireAt) {
-        this._memoryStore.delete(captchaId);
-        return { valid: false, message: '验证码已过期' };
-      }
-      this._memoryStore.delete(captchaId);
-      if (entry.code.toLowerCase() === inputCode.toLowerCase()) {
-        return { valid: true, message: '验证成功' };
-      }
-      return { valid: false, message: '验证码错误' };
+      return this._verifyFromMemory(captchaId, inputCode);
     }
     try {
       const client = getRedisClient();
@@ -1549,8 +1537,28 @@ const captchaCache = {
       }
       return { valid: false, message: '验证码错误' };
     } catch (error) {
-      return { valid: false, message: '验证码验证失败' };
+      // 降级策略与「Redis 未连接」保持一致：退到进程内存储再判一次，
+      // 而不是直接判定验证失败（set 写入时同样有内存兜底，两边口径统一）
+      return this._verifyFromMemory(captchaId, inputCode);
     }
+  },
+
+  /**
+   * 进程内验证（Redis 不可用/报错时的兜底路径）
+   */
+  _verifyFromMemory(captchaId, inputCode) {
+    if (!this._memoryStore) return { valid: false, message: '验证码已过期' };
+    const entry = this._memoryStore.get(captchaId);
+    if (!entry) return { valid: false, message: '验证码已过期' };
+    if (Date.now() > entry.expireAt) {
+      this._memoryStore.delete(captchaId);
+      return { valid: false, message: '验证码已过期' };
+    }
+    this._memoryStore.delete(captchaId);
+    if (entry.code.toLowerCase() === inputCode.toLowerCase()) {
+      return { valid: true, message: '验证成功' };
+    }
+    return { valid: false, message: '验证码错误' };
   }
 };
 

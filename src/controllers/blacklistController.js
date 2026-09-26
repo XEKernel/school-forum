@@ -164,6 +164,11 @@ const blacklistController = {
         return res.status(400).json(generateErrorResponse('用户ID不能为空'));
       }
 
+      // 只能查询与自己相关的拉黑关系（否则等于把「谁拉黑了谁」变成公开可枚举的接口）
+      if (blockerId !== req.user.id && blockedId !== req.user.id) {
+        return res.status(403).json(generateErrorResponse('无权查询他人的拉黑关系', 403));
+      }
+
       const isBlocked = await Blacklist.isBlocked(blockerId, blockedId);
       const isBlockedBy = await Blacklist.isBlocked(blockedId, blockerId);
 
@@ -188,6 +193,11 @@ const blacklistController = {
 
       if (!userId1 || !userId2) {
         return res.status(400).json(generateErrorResponse('用户ID不能为空'));
+      }
+
+      // 同上：必须涉及本人，避免被当作关系枚举器
+      if (userId1 !== req.user.id && userId2 !== req.user.id) {
+        return res.status(403).json(generateErrorResponse('无权查询他人的拉黑关系', 403));
       }
 
       const hasBlockRelation = await Blacklist.hasBlockRelation(userId1, userId2);

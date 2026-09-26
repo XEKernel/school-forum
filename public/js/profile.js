@@ -817,7 +817,9 @@ const profileManager = {
     if (!currentUser) return;
     
     try {
-      const response = await fetch(`/api/block/status?blockerId=${currentUser.id}&blockedId=${this.state.userId}`);
+      const response = await fetch(`/api/block/status?blockerId=${currentUser.id}&blockedId=${this.state.userId}`, {
+        headers: userManager.getAuthHeaders()
+      });
       if (response.ok) {
         const data = await response.json();
         if (data.success) {

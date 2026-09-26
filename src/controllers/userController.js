@@ -1867,6 +1867,20 @@ const userController = {
         );
       }
 
+      // 只接受本人导出的文件：data.userId 来自文件内容（客户端可任意编辑），
+      // 不校验就等于允许把他人导出文件的内容「搬」进自己账号
+      if (data.userId !== userId) {
+        logger.logSecurityEvent('导入数据被拒绝：文件属主与当前用户不一致', {
+          userId,
+          fileUserId: data.userId,
+          ip: req.ip
+        });
+        return res.status(403).json(generateErrorResponse('只能导入本人的数据导出文件', 403));
+      }
+
+      // 单次导入配额：导出文件是客户端可构造的 JSON，不限量等于开放批量写库入口
+      const IMPORT_LIMITS = { posts: 500, favorites: 1000, follows: 500 };
+
       const { include = 'all' } = req.query;
       const includeAll = include === 'all';
       const includes = include.split(',').map(s => s.trim());
@@ -1887,7 +1901,9 @@ const userController = {
       const postIdMap = {}; // oldPostId → newPostId
       if (want('posts') && Array.isArray(data.posts) && data.posts.length > 0) {
         const Post = require('../models/Post');
-        for (const p of data.posts) {
+        const postsToImport = data.posts.slice(0, IMPORT_LIMITS.posts);
+        result.postsSkipped += data.posts.length - postsToImport.length; // 超出配额的部分计入跳过
+        for (const p of postsToImport) {
           try {
             const newId = require('uuid').v4();
             const now = Date.now();
@@ -1925,7 +1941,9 @@ const userController = {
       // 收藏导入
       if (want('favorites') && Array.isArray(data.favorites) && data.favorites.length > 0) {
         const Favorite = require('../models/Favorite');
-        for (const f of data.favorites) {
+        const favoritesToImport = data.favorites.slice(0, IMPORT_LIMITS.favorites);
+        result.favoritesSkipped += data.favorites.length - favoritesToImport.length;
+        for (const f of favoritesToImport) {
           // 如果该帖子也导入了，用新 ID；否则跳过
           const mappedPostId = postIdMap[f.postId];
           if (!mappedPostId) {
@@ -1961,16 +1979,19 @@ const userController = {
       if (want('follows') && data.follows) {
         const Follow = require('../models/Follow');
         // 重建"我关注的用户"列表
-        const followingIds = Array.isArray(data.follows.followingIds)
+        const rawFollowingIds = Array.isArray(data.follows.followingIds)
           ? data.follows.followingIds
           : [];
+        const followingIds = rawFollowingIds.slice(0, IMPORT_LIMITS.follows);
+        result.followsSkipped += rawFollowingIds.length - followingIds.length; // 超出配额的部分计入跳过
         for (const targetUserId of followingIds) {
           if (targetUserId === userId) continue; // 不能关注自己
           try {
             const existing = await Follow.findOne({ followerId: userId, followingId: targetUserId });
             if (existing) continue;
             const targetUser = await getUserById(targetUserId);
-            if (!targetUser) {
+            // 目标账号必须存在且未被封禁（此前的文件可写入任意 userId，包括已封禁/不存在账号）
+            if (!targetUser || targetUser.isActive === false) {
               result.followsSkipped++;
               continue;
             }

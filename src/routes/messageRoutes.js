@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const messageController = require('../controllers/messageController');
-const { upload } = require('../middleware/uploadMiddleware');
+const { upload, verifyImageMagicBytes } = require('../middleware/uploadMiddleware');
 const { authenticateUser } = require('../middleware/jwtAuth');
 
 // 注意：更具体的路由必须放在更通用的路由之前
@@ -10,13 +10,13 @@ const { authenticateUser } = require('../middleware/jwtAuth');
 router.get('/messages/unread', authenticateUser, messageController.getUnreadCount);
 
 // 检查是否可以发送消息（必须在 /messages 之前）
-router.get('/messages/check-permission', messageController.checkSendPermission);
+router.get('/messages/check-permission', authenticateUser, messageController.checkSendPermission);
 
 // 获取可发私信的用户列表（必须在 /messages 之前）
 router.get('/messages/contactable-users', authenticateUser, messageController.getContactableUsers);
 
 // 发送私信（支持图片）
-router.post('/messages', authenticateUser, upload.single('image'), messageController.sendMessage);
+router.post('/messages', authenticateUser, upload.single('image'), verifyImageMagicBytes, messageController.sendMessage);
 
 // 获取会话列表
 router.get('/conversations', authenticateUser, messageController.getConversations);

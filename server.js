@@ -465,15 +465,31 @@ async function startServer() {
   }
 }
 
-// 处理未捕获的异常（记录后优雅退出，避免进程处于不可恢复状态）
-process.on('uncaughtException', (err) => {
-  logger.logError('未捕获的异常，进程即将退出', { error: err.message, stack: err.stack });
-  console.error('未捕获的异常:', err);
+// 致命错误统一处理：先落盘日志再退出，由 PM2/systemd 负责拉起
+// 此前 uncaughtException 退出、unhandledRejection 只记不退，两者策略不一致：
+// 未处理的 Promise 拒绝同样意味着进程可能停在不一致状态（例如计数只写了一半），
+// 继续对外服务只会扩大脏数据，因此统一为「日志 + flushLogsSync + 退出(1)」。
+function handleFatalError(label, payload) {
+  logger.logError(label, payload);
+  console.error(label, payload.error || payload.reason || '');
+  try {
+    logger.flushLogsSync();
+  } catch (_) {
+    // 日志落盘失败不应阻止退出
+  }
   setTimeout(() => process.exit(1), 1000);
+}
+
+process.on('uncaughtException', (err) => {
+  handleFatalError('未捕获的异常，进程即将退出', { error: err.message, stack: err.stack });
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  logger.logError('未处理的 Promise 拒绝', { reason: reason, promise: promise });
+process.on('unhandledRejection', (reason) => {
+  const isError = reason instanceof Error;
+  handleFatalError('未处理的 Promise 拒绝，进程即将退出', {
+    error: isError ? reason.message : String(reason),
+    stack: isError ? reason.stack : undefined
+  });
 });
 
 // 处理进程退出（支持 SIGINT/Ctrl+C 和 SIGTERM/Docker）
