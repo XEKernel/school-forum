@@ -1330,6 +1330,16 @@ const userController = {
         return res.status(401).json(generateErrorResponse('用户不存在'));
       }
 
+      // 密码变更后旧 refresh token 失效检查（与 jwtAuth.authenticateUser 同款判据）：
+      // 否则改密 / 忘记密码重置后，被盗的 refresh token 仍能持续换取新 access token（最长 30 天）
+      // 容差 1 秒：passwordChangedAt 为毫秒精度、token iat 为秒精度
+      if (user.passwordChangedAt && result.decoded.iat) {
+        const changedAt = new Date(user.passwordChangedAt).getTime();
+        if (result.decoded.iat * 1000 + 1000 < changedAt) {
+          return res.status(401).json(generateErrorResponse('登录已失效，请重新登录'));
+        }
+      }
+
       // 生成新的访问令牌
       const newAccessToken = generateAccessToken(user.id, {
         username: user.username,

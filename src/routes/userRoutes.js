@@ -3,6 +3,9 @@ const router = express.Router();
 const userController = require('../controllers/userController');
 const { upload } = require('../middleware/uploadMiddleware');
 const { authenticateUser, optionalAuth } = require('../middleware/jwtAuth');
+// 发码类接口的精确限流（server.js 的路径子串匹配覆盖不到下面 4 条：
+// '-login-' 不含 '/login'、'-change-code' 也不匹配任何子串规则）
+const { rateLimiters } = require('../middleware/rateLimitMiddleware');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
@@ -67,10 +70,10 @@ router.post('/register', userController.register);
 router.post('/send-verification-code', userController.sendVerificationCode);
 
 // 发送登录验证码
-router.post('/send-login-verification-code', userController.sendLoginVerificationCode);
+router.post('/send-login-verification-code', rateLimiters.verificationCode, userController.sendLoginVerificationCode);
 
 // 发送密码修改验证码（需要验证当前密码）
-router.post('/send-password-change-code', authenticateUser, userController.sendPasswordChangeCode);
+router.post('/send-password-change-code', authenticateUser, rateLimiters.verificationCode, userController.sendPasswordChangeCode);
 
 // 验证密码修改验证码
 router.post('/verify-password-change-code', authenticateUser, userController.verifyPasswordChangeCode);
@@ -79,7 +82,7 @@ router.post('/verify-password-change-code', authenticateUser, userController.ver
 router.post('/change-password', authenticateUser, userController.changePassword);
 
 // 发送邮箱修改验证码（需要验证当前密码）
-router.post('/send-email-change-code', authenticateUser, userController.sendEmailChangeCode);
+router.post('/send-email-change-code', authenticateUser, rateLimiters.verificationCode, userController.sendEmailChangeCode);
 
 // 验证邮箱修改并完成修改
 router.post('/verify-email-change', authenticateUser, userController.verifyEmailChange);
@@ -160,7 +163,7 @@ router.post('/users/:id/avatar', authenticateUser, avatarUpload.single('avatar')
 router.delete('/users/:id/avatar', authenticateUser, userController.removeAvatar);
 
 // 发送账户注销验证码
-router.post('/send-deletion-code', authenticateUser, userController.sendDeletionCode);
+router.post('/send-deletion-code', authenticateUser, rateLimiters.verificationCode, userController.sendDeletionCode);
 
 // 注销用户账户
 router.post('/delete-account', authenticateUser, userController.deleteAccount);

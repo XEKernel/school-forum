@@ -396,13 +396,17 @@ async function recordLoginAttempt(identifier, success, ip) {
       return { allowed: true };
     }
     
-    // 登录失败，增加计数
-    const attempts = await redis.incr(key);
-    
-    if (attempts === 1) {
-      // 首次失败，设置过期时间
-      await redis.expire(key, Math.ceil(LOGIN_SECURITY.lockTime / 1000));
-    }
+    // 登录失败，原子地自增计数并在首次失败时设置过期时间
+    // 原实现是两条独立命令（INCR 后跟 EXPIRE），一旦在两者之间中断/断连，
+    // key 会永不过期 → 该账号被永久锁死（且没有任何补偿路径）。
+    // 改为在 Redis 端用 Lua 一次执行，保证「计数 + TTL」同时成立。
+    const lockSeconds = Math.ceil(LOGIN_SECURITY.lockTime / 1000);
+    const attempts = Number(await redis.eval(
+      "local c = redis.call('INCR', KEYS[1])\n" +
+      "if c == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end\n" +
+      "return c",
+      { keys: [key], arguments: [String(lockSeconds)] }
+    ));
     
     // 检查是否需要锁定
     if (attempts >= LOGIN_SECURITY.maxAttempts) {
