@@ -208,8 +208,8 @@ const blacklistController = {
   async getBlockedList(req, res) {
     try {
       const userId = req.user.id;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
       const skip = (page - 1) * limit;
 
       if (!userId) {

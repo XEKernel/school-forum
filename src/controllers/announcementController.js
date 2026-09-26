@@ -16,13 +16,16 @@ exports.getAllAnnouncements = async (req, res) => {
       query.isActive = isActive === 'true';
     }
     
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
     
     const [announcements, total] = await Promise.all([
       Announcement.find(query)
         .sort({ isPinned: -1, createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(limitNum),
       Announcement.countDocuments(query)
     ]);
     
@@ -44,9 +47,9 @@ exports.getAllAnnouncements = async (req, res) => {
       announcements: announcementsWithCreator,
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit))
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
       }
     });
   } catch (error) {

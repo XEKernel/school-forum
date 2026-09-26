@@ -64,10 +64,12 @@ const statsController = {
       if (!q) {
         return res.status(400).json(generateErrorResponse('搜索关键词不能为空'));
       }
+
+      // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]
+      const pageNum = Math.max(1, parseInt(page, 10) || paginationConfig.defaultPage);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || paginationConfig.defaultLimit));
       
       if (type === 'posts') {
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
         const query = { isDeleted: false, content: new RegExp(escapeRegex(q), 'i') };
         const [results, total] = await Promise.all([
           Post.find(query).sort({ timestamp: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
@@ -80,8 +82,6 @@ const statsController = {
           type: 'posts'
         }));
       } else if (type === 'users') {
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
         const query = { username: new RegExp(escapeRegex(q), 'i') };
         const [users, total] = await Promise.all([
           User.find(query).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
@@ -116,7 +116,7 @@ const statsController = {
 
       const { limit = 50, order = 'desc' } = req.query;
       const stats = await ipStats.getAllStats({
-        limit: parseInt(limit),
+        limit: Math.min(100, Math.max(1, parseInt(limit, 10) || 50)),
         order
       });
 

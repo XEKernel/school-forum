@@ -132,6 +132,10 @@ const favoriteController = {
         return res.status(400).json(generateErrorResponse('用户ID不能为空'));
       }
 
+      // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+
       // 归属校验（2026-08-10 渗透测试修复：IDOR）——只能查看自己或管理员查看任意用户
       const viewer = await User.findOne({ id: req.user.id }).select('isAdmin').lean();
       if (req.user.id !== userId && !(viewer && viewer.isAdmin)) {
@@ -180,15 +184,15 @@ const favoriteController = {
         });
 
       // 分页
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + parseInt(limit);
+      const startIndex = (pageNum - 1) * limitNum;
+      const endIndex = startIndex + limitNum;
       const paginatedPosts = favoritePosts.slice(startIndex, endIndex);
 
       res.json(generateSuccessResponse({
         posts: paginatedPosts,
         pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(favoritePosts.length / limit),
+          currentPage: pageNum,
+          totalPages: Math.ceil(favoritePosts.length / limitNum),
           totalPosts: favoritePosts.length,
           hasNext: endIndex < favoritePosts.length,
           hasPrev: startIndex > 0

@@ -275,9 +275,11 @@ const messageController = {
       }
 
       // 获取消息
+      // 分页钳制（与 postController 一致）：limit ∈ [1,100]，防止超大 limit 一次拉走整个会话
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
       const messages = await Message.find(query)
         .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
+        .limit(limitNum)
         .lean();
 
       // 标记消息为已读

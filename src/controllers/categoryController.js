@@ -38,7 +38,10 @@ exports.getCategoryPosts = async (req, res) => {
   try {
     const { id } = req.params;
     const { page = 1, limit = 20, sortBy = 'latest' } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]，防止超大 limit 拖垮查询
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
     // 查看者身份必须来自认证中间件（optionalAuth），绝不信任客户端 query 参数
     const viewerId = req.user?.id || null;
 
@@ -59,7 +62,7 @@ exports.getCategoryPosts = async (req, res) => {
       sort = { likes: -1, timestamp: -1 };
     }
 
-    const posts = await Post.find(query).sort(sort).skip(skip).limit(parseInt(limit));
+    const posts = await Post.find(query).sort(sort).skip(skip).limit(limitNum);
 
     // 可见性过滤：self 仅作者可见，followers 仅作者与粉丝可见，public 所有人可见
     let visiblePosts = posts;
@@ -94,9 +97,9 @@ exports.getCategoryPosts = async (req, res) => {
       },
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit))
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
       }
     }));
   } catch (error) {
@@ -176,10 +179,13 @@ exports.getAllCategories = async (req, res) => {
       query.isActive = isActive === 'true';
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (pageNum - 1) * limitNum;
 
     const [categories, total] = await Promise.all([
-      Category.find(query).sort({ order: 1, createdAt: 1 }).skip(skip).limit(parseInt(limit)),
+      Category.find(query).sort({ order: 1, createdAt: 1 }).skip(skip).limit(limitNum),
       Category.countDocuments(query)
     ]);
 
@@ -187,9 +193,9 @@ exports.getAllCategories = async (req, res) => {
       categories,
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit))
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
       }
     }));
   } catch (error) {
@@ -324,10 +330,13 @@ exports.getAllApplications = async (req, res) => {
       query.status = status;
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const skip = (pageNum - 1) * limitNum;
 
     const [applications, total] = await Promise.all([
-      CategoryApplication.find(query).sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
+      CategoryApplication.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
       CategoryApplication.countDocuments(query)
     ]);
 
@@ -335,9 +344,9 @@ exports.getAllApplications = async (req, res) => {
       applications,
       pagination: {
         total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / parseInt(limit))
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum)
       }
     }));
   } catch (error) {

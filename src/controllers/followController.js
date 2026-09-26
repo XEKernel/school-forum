@@ -211,8 +211,8 @@ const followController = {
     try {
       const userId = req.params.userId;
       const currentUserId = req.query.currentUserId; // 当前登录用户ID
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
       const skip = (page - 1) * limit;
 
       if (!userId) {
@@ -278,8 +278,8 @@ const followController = {
     try {
       const userId = req.params.userId;
       const currentUserId = req.query.currentUserId; // 当前登录用户ID
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
       const skip = (page - 1) * limit;
 
       if (!userId) {
@@ -344,8 +344,8 @@ const followController = {
   async getFollowingPosts(req, res) {
     try {
       const userId = req.params.userId;
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 10;
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
       const skip = (page - 1) * limit;
 
       if (!userId) {

@@ -35,8 +35,9 @@ const adminController = {
     try {
       const paginationConfig = getPaginationConfig();
       const { page = paginationConfig.defaultPage, limit = paginationConfig.defaultLimit, search = '' } = req.query;
-      const pageNum = parseInt(page);
-      const limitNum = parseInt(limit);
+      // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]
+      const pageNum = Math.max(1, parseInt(page, 10) || paginationConfig.defaultPage);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || paginationConfig.defaultLimit));
 
       logger.logInfo('管理员访问帖子列表', {
         page: pageNum,
@@ -435,8 +436,9 @@ const adminController = {
     try {
       const paginationConfig = getPaginationConfig();
       const { page = paginationConfig.defaultPage, limit = paginationConfig.defaultLimit, search = '' } = req.query;
-      const pageNum = parseInt(page);
-      const limitNum = parseInt(limit);
+      // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]
+      const pageNum = Math.max(1, parseInt(page, 10) || paginationConfig.defaultPage);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || paginationConfig.defaultLimit));
       // 聚合管道：展开评论子文档，过滤/排序/分页全部在数据库层完成
       const pipeline = [
         { $match: { isDeleted: false, comments: { $exists: true, $ne: [] } } },
@@ -538,6 +540,9 @@ const adminController = {
   getLogs(req, res) {
     try {
       const { page = 1, limit = 50, level, search, date } = req.query;
+      // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
 
       logger.logInfo('管理员访问日志', { page, limit, level, search, date, ip: req.ip });
 
@@ -594,15 +599,15 @@ const adminController = {
       logs.reverse();
 
       // 分页
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + parseInt(limit);
+      const startIndex = (pageNum - 1) * limitNum;
+      const endIndex = startIndex + limitNum;
       const paginatedLogs = logs.slice(startIndex, endIndex);
 
       res.json(generateSuccessResponse({
         logs: paginatedLogs,
         pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(logs.length / limit),
+          currentPage: pageNum,
+          totalPages: Math.ceil(logs.length / limitNum),
           totalLogs: logs.length,
           hasNext: endIndex < logs.length,
           hasPrev: startIndex > 0
@@ -684,7 +689,9 @@ const adminController = {
       
       logger.logInfo('管理员访问IP统计列表', { limit, order, ip: req.ip });
       
-      const stats = await ipStats.getAllStats({ limit: parseInt(limit), order });
+      // 分页钳制（与 postController 一致）：limit ∈ [1,100]
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+      const stats = await ipStats.getAllStats({ limit: limitNum, order });
       
       res.json(generateSuccessResponse({ stats }));
     } catch (error) {

@@ -175,9 +175,13 @@ const reportController = {
       const { page = paginationConfig.defaultPage, limit = paginationConfig.defaultLimit, status } = req.query;
       const reports = await getReports(status || null);
 
+      // 分页钳制（与 postController 一致）：page ≥ 1，limit ∈ [1,100]
+      const pageNum = Math.max(1, parseInt(page, 10) || paginationConfig.defaultPage);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || paginationConfig.defaultLimit));
+
       // 分页
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + parseInt(limit);
+      const startIndex = (pageNum - 1) * limitNum;
+      const endIndex = startIndex + limitNum;
       const paginatedReports = reports.slice(startIndex, endIndex);
 
       // 获取举报人信息（批量查询，替代 getUsers() 全量加载）
@@ -197,8 +201,8 @@ const reportController = {
       res.json(generateSuccessResponse({
         reports: reportsWithReporter,
         pagination: {
-          currentPage: parseInt(page),
-          totalPages: Math.ceil(reports.length / limit),
+          currentPage: pageNum,
+          totalPages: Math.ceil(reports.length / limitNum),
           totalReports: reports.length,
           hasNext: endIndex < reports.length,
           hasPrev: startIndex > 0
