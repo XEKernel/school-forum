@@ -251,10 +251,12 @@ const userController = {
       await updateUser(userId, { password: hashedPassword, passwordChangedAt: new Date() });
 
       // 使当前 JWT 令牌失效（安全：防止密码修改后旧令牌仍可用）
-      const { invalidateToken } = require('../middleware/jwtAuth');
+      const { invalidateToken, clearAuthCookies } = require('../middleware/jwtAuth');
       if (req.token) {
         await invalidateToken(req.token);
       }
+      // 同时清掉 HttpOnly Cookie（改密后浏览器端会话必须重新建立）
+      clearAuthCookies(res);
 
       logger.logUserAction('密码修改成功', userId, user.username, { ip: req.ip });
 
@@ -472,9 +474,12 @@ const userController = {
       });
 
       // 生成登录 Token
-      const { generateAccessToken, generateRefreshToken } = require('../middleware/jwtAuth');
+      const { generateAccessToken, generateRefreshToken, setAuthCookies } = require('../middleware/jwtAuth');
       const accessToken = generateAccessToken(newUser.id);
       const refreshToken = generateRefreshToken(newUser.id);
+
+      // 同时下发 HttpOnly Cookie（浏览器端不再把令牌写进 localStorage）
+      setAuthCookies(req, res, { accessToken, refreshToken });
 
       // 返回用户信息（不包含密码）和 Token
       const { password: _, ...safeUser } = newUser;
@@ -748,6 +753,10 @@ const userController = {
       if (isAdmin) {
         responseData.adminToken = adminToken;
       }
+
+      // 下发 HttpOnly Cookie：access/refresh（管理员再加 admin）
+      const { setAuthCookies } = require('../middleware/jwtAuth');
+      setAuthCookies(req, res, { accessToken, refreshToken, adminToken });
 
       res.json(generateSuccessResponse(responseData, isAdmin ? '管理员登录成功' : '登录成功'));
     } catch (error) {
@@ -1312,13 +1321,14 @@ const userController = {
   // 刷新访问令牌
   async refreshToken(req, res) {
     try {
-      const { refreshToken } = req.body;
+      const { extractToken, verifyToken, generateAccessToken, setAuthCookies } = require('../middleware/jwtAuth');
+
+      // 令牌来源：请求体（API 客户端）→ HttpOnly Cookie（浏览器端不持有 refresh 原文）
+      const refreshToken = req.body?.refreshToken || extractToken(req, 'refresh');
 
       if (!refreshToken) {
         return res.status(400).json(generateErrorResponse('刷新令牌不能为空'));
       }
-
-      const { verifyToken, generateAccessToken } = require('../middleware/jwtAuth');
 
       // 验证刷新令牌
       const result = verifyToken(refreshToken);
@@ -1364,6 +1374,9 @@ const userController = {
         qq: user.qq
       });
 
+      // 刷新成功后同步更新 Cookie 里的 access token（浏览器端无需自行存储）
+      setAuthCookies(req, res, { accessToken: newAccessToken });
+
       res.json(generateSuccessResponse({
         token: newAccessToken
       }, '令牌刷新成功'));
@@ -1376,12 +1389,16 @@ const userController = {
   // 用户登出
   async logout(req, res) {
     try {
-      const { token } = req.body;
+      const { extractToken, invalidateToken, clearAuthCookies } = require('../middleware/jwtAuth');
+      // 优先用请求体里的 token（API 客户端），否则用 Cookie 里的（浏览器）
+      const token = req.body?.token || extractToken(req);
 
       if (token) {
-        const { invalidateToken } = require('../middleware/jwtAuth');
         await invalidateToken(token);
       }
+
+      // 清掉 HttpOnly Cookie，浏览器端不需要（也无法）自行清除
+      clearAuthCookies(res);
 
       logger.logSecurityEvent('logout', {
         ip: req.ip,
@@ -1398,12 +1415,14 @@ const userController = {
   // 管理员登出
   async adminLogout(req, res) {
     try {
-      const { token } = req.body;
+      const { extractToken, invalidateToken, clearAuthCookies } = require('../middleware/jwtAuth');
+      const token = req.body?.token || extractToken(req, 'admin');
 
       if (token) {
-        const { invalidateToken } = require('../middleware/jwtAuth');
         await invalidateToken(token, true);
       }
+
+      clearAuthCookies(res);
 
       logger.logSecurityEvent('admin_logout', {
         ip: req.ip,
@@ -1557,7 +1576,11 @@ const userController = {
         ip: req.ip,
         keepData: keepPosts
       });
-      
+
+      // 账号已删除，清掉认证 Cookie
+      const { clearAuthCookies } = require('../middleware/jwtAuth');
+      clearAuthCookies(res);
+
       res.json(generateSuccessResponse({}, '账户已注销'));
     } catch (error) {
       logger.logError('注销账户失败', { error: error.message, userId: req.body.userId });
@@ -2124,7 +2147,7 @@ const userController = {
       // ===== 登录场景 =====
       if (existing) {
         // 已有账号：构建登录响应
-        const payload = await buildAuthPayload(existing, req);
+        const payload = await buildAuthPayload(existing, req, res);
         session.profile = profile;
         session.result = { needProfile: false, ...payload.responseData };
       } else {
@@ -2151,6 +2174,18 @@ const userController = {
       const session = await qqCache.get(state);
       if (!session) return res.status(404).json(generateErrorResponse('QQ授权会话已过期，请重新登录'));
       const profile = session.profile || {};
+
+      // QQ 登录成功时同样下发 HttpOnly Cookie（前端从这个接口拿结果，是浏览器侧的主路径）
+      const qqResult = session.result || null;
+      if (session.type === 'login' && qqResult && qqResult.token) {
+        const { setAuthCookies } = require('../middleware/jwtAuth');
+        setAuthCookies(req, res, {
+          accessToken: qqResult.token,
+          refreshToken: qqResult.refreshToken,
+          adminToken: qqResult.adminToken
+        });
+      }
+
       res.json(generateSuccessResponse({
         type: session.type,
         result: session.result || null,
@@ -2242,7 +2277,7 @@ const userController = {
       await qqCache.del(state); // 一次性消费
 
       // 构建登录响应
-      const payload = await buildAuthPayload(created, req);
+      const payload = await buildAuthPayload(created, req, res);
       res.json(generateSuccessResponse(payload.responseData, '注册成功'));
     } catch (error) {
       logger.logError('QQ补全资料注册失败', { error: error.message });
@@ -2522,7 +2557,7 @@ function generateCaptchaSvg(code) {
  * 构建登录成功响应（JWT 签发 + 新设备检测 + 站内/邮件提醒）——QQ 登录复用
  * 与 login 控制器逻辑一致，返回 { responseData }
  */
-async function buildAuthPayload(user, req) {
+async function buildAuthPayload(user, req, res) {
   const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                    req.headers['x-real-ip'] ||
                    req.connection?.remoteAddress ||
@@ -2532,7 +2567,8 @@ async function buildAuthPayload(user, req) {
   const {
     generateAccessToken,
     generateRefreshToken,
-    generateAdminToken
+    generateAdminToken,
+    setAuthCookies
   } = require('../middleware/jwtAuth');
 
   // 管理员判定（role 优先，其次 UUID 白名单；不再使用可被改绑的 qq 判据）
@@ -2542,6 +2578,9 @@ async function buildAuthPayload(user, req) {
   const refreshToken = generateRefreshToken(user.id);
   let adminToken = null;
   if (isAdmin) adminToken = generateAdminToken(user.id, { username: user.username, qq: user.qq });
+
+  // 下发 HttpOnly Cookie（QQ 登录/注册同样走 Cookie 主通道）
+  if (res) setAuthCookies(req, res, { accessToken, refreshToken, adminToken });
 
   // 新设备登录检测
   const uaInfo = parseUserAgent(req.headers['user-agent']);

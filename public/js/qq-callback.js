@@ -34,11 +34,9 @@
   }
 
   // 保存登录态（与 auth.js 一致）
+  // 令牌由服务端写入 HttpOnly Cookie，前端只保存展示用的用户信息
   function saveAuth(data) {
     localStorage.setItem('forumUser', JSON.stringify(data.user));
-    if (data.token) localStorage.setItem('accessToken', data.token);
-    if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-    if (data.adminToken) localStorage.setItem('adminToken', data.adminToken);
   }
 
   async function main() {

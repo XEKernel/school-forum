@@ -60,11 +60,11 @@ displayAdminInfo: function() {
   }
 },
 
-  // 获取携带 adminToken 的请求头（所有管理员 API 请求必须使用此函数）
+  // 获取携带管理员身份的请求头（所有管理员 API 请求必须使用此函数）
+  // 管理员令牌改由 HttpOnly Cookie（sf_admin_token）传输：同源请求自动携带，
+  // 前端不再持有也不需要拼接 Authorization
   getAdminHeaders: function(extra) {
-    const token = localStorage.getItem('adminToken');
     const headers = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
     return Object.assign(headers, extra);
   },
 
@@ -117,12 +117,11 @@ checkAdminAuth: async function() {
 // 向服务器验证用户状态，返回 { isAdmin, user } 或 false
 verifyUserWithServer: async function(user) {
   try {
-    // 携带用户 accessToken：服务端 verifyAuth 已不再信任 body.userId，身份完全来自 JWT
+    // 携带用户身份：令牌在 HttpOnly Cookie 里，同源请求自动带上，身份由服务端从 Cookie 解析
     const response = await fetch('/api/auth/verify', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + (localStorage.getItem('accessToken') || '')
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({})
     });
@@ -255,20 +254,10 @@ fetchWithTimeout: function(url, options = {}) {
 
   console.log('发送管理员请求:', { url, method: options.method, currentAdmin: this.state.currentAdmin });
   
-  // 确保所有管理员请求都包含管理员ID 和 Authorization 头
+  // 确保所有管理员请求都携带管理员身份（HttpOnly Cookie 自动携带，无需拼头）
   if (this.state.currentAdmin) {
-    // 统一注入 Authorization 头（adminToken）
     if (!options.headers) {
       options.headers = {};
-    }
-    const adminToken = localStorage.getItem('adminToken');
-    if (!adminToken) {
-      console.error('adminToken 不存在，请重新登录管理员账号');
-      // 返回一个立即 reject 的 Promise，触发权限失效提示
-      return Promise.reject(new Error('管理员会话已失效，请重新登录'));
-    }
-    if (!options.headers['Authorization']) {
-      options.headers['Authorization'] = `Bearer ${adminToken}`;
     }
 
     // 如果是GET请求，在URL中添加adminId参数
@@ -2693,6 +2682,9 @@ confirmDeletePost: async function() {
     // 退出管理
     logout: function() {
         if (confirm('确定要退出管理后台吗？')) {
+            // 管理员令牌在 HttpOnly Cookie 中，需服务端清除（前端无法读取或删除）
+            fetch('/api/admin/logout', { method: 'POST', headers: this.getAdminHeaders() }).catch(() => {});
+            localStorage.removeItem('adminToken');
             window.location.href = 'index.html';
         }
     },

@@ -825,12 +825,9 @@ const simpleEditManager = {
         formData.append('images', image.file);
       });
       
-      // 发送请求（FormData 不需要 Content-Type，让浏览器自动设置）
-      const token = localStorage.getItem('accessToken');
-      const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+      // 发送请求（FormData 不需要 Content-Type，让浏览器自动设置；令牌在 HttpOnly Cookie 中自动携带）
       const response = await fetch(`/api/posts/${this.state.editPostId}`, {
         method: 'PUT',
-        headers: authHeaders,
         body: formData
       });
       
@@ -963,12 +960,9 @@ const simpleEditManager = {
         formData.append('images', image.file);
       });
       
-      // 发布请求（FormData 不需要 Content-Type，让浏览器自动设置 multipart/form-data）
-      const token = localStorage.getItem('accessToken');
-      const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+      // 发布请求（FormData 不需要 Content-Type；令牌在 HttpOnly Cookie 中自动携带）
       const response = await fetch('/api/posts', {
         method: 'POST',
-        headers: authHeaders,
         body: formData
       });
       

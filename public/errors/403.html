@@ -96,109 +96,12 @@
       </div>
     </div>
   </div>
-
-  <script>
-    // 检查用户登录状态
-    function checkLoginStatus() {
-      try {
-        const token = localStorage.getItem('token');
-        const user = localStorage.getItem('user');
-        
-        if (token && user) {
-          // 用户已登录，但可能不是管理员
-          const userData = JSON.parse(user);
-          const userInfo = document.getElementById('userInfo');
-          
-          userInfo.innerHTML = `
-            <i class="fas fa-user"></i>
-            <span>当前用户: ${(userData.username || '未知用户').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</span>
-            <span style="color: var(--error-color); margin-left: 10px;">(非管理员)</span>
-          `;
-          
-          // 提供重新登录选项
-          if (confirm('您当前不是管理员账号。是否要重新登录？')) {
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            window.location.href = '../login.html';
-          }
-        } else {
-          // 用户未登录，跳转到登录页面
-          window.location.href = '../login.html';
-        }
-      } catch (error) {
-        console.error('检查登录状态时出错:', error);
-        window.location.href = '../login.html';
-      }
-    }
-    
-    // 页面加载时检查登录状态
-    document.addEventListener('DOMContentLoaded', function() {
-      try {
-        const token = localStorage.getItem('token');
-        const user = localStorage.getItem('user');
-        const userInfo = document.getElementById('userInfo');
-        
-        if (token && user) {
-          const userData = JSON.parse(user);
-          userInfo.innerHTML = `
-            <i class="fas fa-user"></i>
-            <span>当前用户: ${(userData.username || '未知用户').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</span>
-            <span style="color: var(--error-color); margin-left: 10px;">(非管理员)</span>
-          `;
-        } else {
-          userInfo.innerHTML = `
-            <i class="fas fa-user-times"></i>
-            <span>未登录</span>
-          `;
-        }
-      } catch (error) {
-        console.error('初始化用户信息时出错:', error);
-      }
-    });
-    
-    // 自动跳转到登录页面的倒计时
-    let redirectTimer = null;
-    function startRedirectTimer() {
-      let seconds = 10;
-      const timerElement = document.createElement('div');
-      timerElement.style.cssText = `
-        margin-top: 15px;
-        font-size: 14px;
-        color: var(--text-light);
-      `;
-      document.querySelector('.error-actions').parentNode.insertBefore(timerElement, document.querySelector('.error-actions'));
-      
-      redirectTimer = setInterval(() => {
-        seconds--;
-        timerElement.innerHTML = `<i class="fas fa-clock"></i> ${seconds}秒后自动跳转到登录页面...`;
-        
-        if (seconds <= 0) {
-          clearInterval(redirectTimer);
-          window.location.href = '../login.html';
-        }
-      }, 1000);
-    }
-    
-    // 如果用户未登录，启动倒计时
-    setTimeout(() => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        startRedirectTimer();
-      }
-    }, 5000);
-  </script>
+  <!-- 原内联脚本已抽到 js/error-403.js：CSP 不再对 script-src 放行 unsafe-inline -->
+  <script src="js/error-403.js"></script>
+  
   
   <!-- 用户管理系统 -->
   <script src="../js/utils.js" defer></script>
-  <script src="../js/user.js" defer></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // 初始化用户管理
-      if (typeof userManager !== 'undefined') {
-        userManager.init();
-        userManager.setupEventListeners();
-      }
-    });
-  </script>
+  <script src="js/error-common.js"></script>
 </body>
 </html>

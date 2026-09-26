@@ -233,18 +233,6 @@
         </p>
     </div>
     
-    <script>
-        // 从服务器获取维护消息
-        fetch('/api/maintenance-message')
-            .then(res => res.json())
-            .then(data => {
-                if (data.success && data.message) {
-                    document.getElementById('maintenance-text').textContent = data.message;
-                }
-            })
-            .catch(() => {
-                // 使用默认消息
-            });
-    </script>
+    <script src="js/error-maintenance.js"></script>
 </body>
 </html>

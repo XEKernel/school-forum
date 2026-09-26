@@ -773,9 +773,7 @@ async function registerUser() {
     if (data.success) {
       state.currentUser = data.user;
       localStorage.setItem('forumUser', JSON.stringify(data.user));
-      // 保存 JWT Token（注册接口返回 accessToken/refreshToken）
-      if (data.accessToken) localStorage.setItem('accessToken', data.accessToken);
-      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+      // 令牌由服务端写入 HttpOnly Cookie（JS 读不到，XSS 偷不走），前端不再落 localStorage
       
       showNotification(`注册成功，欢迎 ${data.user.username}！正在跳转...`, 'success');
       
@@ -873,11 +871,7 @@ async function loginUser() {
 
       state.currentUser = userData;
       localStorage.setItem('forumUser', JSON.stringify(userData));
-      // 保存 JWT Token（登录接口返回 token/refreshToken，管理员额外返回 adminToken）
-      const tok = data.token || data.accessToken;
-      if (tok) localStorage.setItem('accessToken', tok);
-      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-      if (data.adminToken) localStorage.setItem('adminToken', data.adminToken);
+      // 令牌由服务端写入 HttpOnly Cookie（access/refresh/admin 三件套），前端不再保存
       
       // 检查是否是管理员
       if (userData.isAdmin) {
@@ -986,11 +980,7 @@ async function loginAdmin() {
       
       state.currentUser = userData;
       localStorage.setItem('forumUser', JSON.stringify(userData));
-      // 保存 JWT Token（管理员登录同样返回 token/refreshToken/adminToken）
-      const tok = data.token || data.accessToken;
-      if (tok) localStorage.setItem('accessToken', tok);
-      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-      if (data.adminToken) localStorage.setItem('adminToken', data.adminToken);
+      // 令牌由服务端写入 HttpOnly Cookie（含 admin token），前端不再保存
       
       showNotification(`管理员 ${userData.username} 登录成功！正在跳转到管理后台...`, 'success');
       

@@ -85,19 +85,103 @@ function verifyToken(token, isAdmin = false) {
   }
 }
 
+// ==================== HttpOnly Cookie 传输 ====================
+// 浏览器端不再把令牌放进 localStorage（XSS 可直接读走），改由 HttpOnly Cookie 传输；
+// Authorization 头仍然支持（API / Android 客户端不受影响），头优先、Cookie 兜底。
+// CSRF：SameSite=Lax + 状态变更接口全部走 POST/PUT/DELETE（跨站表单不会带上该 Cookie）。
+const AUTH_COOKIES = {
+  access: 'sf_access_token',
+  refresh: 'sf_refresh_token',
+  admin: 'sf_admin_token'
+};
+
+const DURATION_UNIT_MS = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+
+// 把 '7d' / '24h' / '1800s' 这类配置值换算成毫秒（Cookie maxAge 需要毫秒）
+function durationToMs(value, fallbackMs) {
+  const matched = /^(\d+)\s*([smhd])?$/.exec(String(value || '').trim());
+  if (!matched) return fallbackMs;
+  const unit = DURATION_UNIT_MS[matched[2] || 's'];
+  return parseInt(matched[1], 10) * unit;
+}
+
+// 轻量 Cookie 解析（避免为解析一个请求头引入 cookie-parser 依赖）
+function parseCookies(req) {
+  const raw = req.headers && req.headers.cookie;
+  if (!raw) return {};
+  const out = {};
+  for (const part of raw.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 0) continue;
+    const key = part.slice(0, idx).trim();
+    if (!key) continue;
+    const val = part.slice(idx + 1).trim();
+    try {
+      out[key] = decodeURIComponent(val);
+    } catch (_) {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
+function isHttpsRequest(req) {
+  if (req.secure) return true;
+  const proto = String((req.headers && req.headers['x-forwarded-proto']) || '').split(',')[0].trim();
+  return proto === 'https';
+}
+
 /**
- * 从请求中提取令牌
- * 安全说明：仅从 Authorization 头提取，不支持 query 参数（token 出现在 URL 会
- * 泄露到访问日志/浏览器历史/Referer）；cookie 方式需显式启用 cookie-parser 才会生效
+ * 下发认证 Cookie（登录 / 注册 / QQ 登录 / 刷新令牌成功时调用）
+ * @param {object} req
+ * @param {object} res
+ * @param {{accessToken?:string, refreshToken?:string, adminToken?:string}} tokens
  */
-function extractToken(req) {
+function setAuthCookies(req, res, tokens = {}) {
+  const secure = isHttpsRequest(req);
+  const write = (name, value, maxAge) => {
+    if (!value) return;
+    res.cookie(name, value, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure,
+      path: '/',
+      maxAge
+    });
+  };
+  write(AUTH_COOKIES.access, tokens.accessToken, durationToMs(JWT_CONFIG.expiresIn, 7 * DURATION_UNIT_MS.d));
+  write(AUTH_COOKIES.refresh, tokens.refreshToken, durationToMs(JWT_CONFIG.refreshExpiresIn, 30 * DURATION_UNIT_MS.d));
+  write(AUTH_COOKIES.admin, tokens.adminToken, durationToMs(ADMIN_JWT_CONFIG.expiresIn, 24 * DURATION_UNIT_MS.h));
+}
+
+/**
+ * 清除认证 Cookie（登出 / 改密 / 注销账户）
+ */
+function clearAuthCookies(res) {
+  for (const name of Object.values(AUTH_COOKIES)) {
+    res.clearCookie(name, { httpOnly: true, sameSite: 'lax', path: '/' });
+  }
+}
+
+/**
+ * 提取请求中的令牌
+ * 顺序：Authorization 头（API / Android 客户端）→ HttpOnly Cookie（浏览器主通道）
+ * 安全说明：不支持 query 参数（token 出现在 URL 会泄露到访问日志/浏览器历史/Referer）
+ * @param {object} req
+ * @param {'access'|'refresh'|'admin'} kind - 取哪一类 Cookie
+ */
+function extractToken(req, kind = 'access') {
   // 优先从 Authorization 头获取
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7);
+    const headerToken = authHeader.substring(7).trim();
+    // 前端停用 localStorage 后可能残留 `Bearer ` 空值，此时继续走 Cookie
+    if (headerToken) return headerToken;
   }
 
-  return null;
+  // 回退到 HttpOnly Cookie
+  const cookies = parseCookies(req);
+  return cookies[AUTH_COOKIES[kind]] || null;
 }
 
 /**
@@ -241,7 +325,8 @@ async function blacklistToken(token, ttlSeconds = null) {
  */
 async function authenticateAdmin(req, res, next) {
   try {
-    const token = extractToken(req);
+    // 管理员 Cookie 与用户 Cookie 分开存放，后台接口只认管理员那一个
+    const token = extractToken(req, 'admin');
     
     if (!token) {
       return res.status(401).json({
@@ -535,6 +620,9 @@ module.exports = {
   generateAdminToken,
   verifyToken,
   extractToken,
+  setAuthCookies,
+  clearAuthCookies,
+  AUTH_COOKIES,
   authenticateUser,
   authenticateAdmin,
   optionalAuth,

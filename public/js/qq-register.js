@@ -201,11 +201,8 @@
         return;
       }
 
-      // 保存登录态
+      // 保存登录态（令牌由服务端写入 HttpOnly Cookie，前端只留展示用用户信息）
       localStorage.setItem('forumUser', JSON.stringify(data.user));
-      if (data.token) localStorage.setItem('accessToken', data.token);
-      if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-      if (data.adminToken) localStorage.setItem('adminToken', data.adminToken);
 
       showNotification(`注册成功，欢迎 ${data.user.username}！`, 'success');
       setTimeout(() => { window.location.href = 'index.html'; }, 1200);

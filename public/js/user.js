@@ -30,10 +30,10 @@ const userManager = {
 
   // 获取携带 JWT Token 的请求头（所有需要认证的 fetch 调用必须使用此函数）
   getAuthHeaders: function(skipContentType) {
-    const token = localStorage.getItem('accessToken');
+    // 令牌改由 HttpOnly Cookie 传输（浏览器同源 fetch 自动携带，JS 读不到，
+    // XSS 无法窃取）；不再从 localStorage 取 token 拼 Authorization
     const headers = {};
     if (!skipContentType) headers['Content-Type'] = 'application/json';
-    if (token) headers['Authorization'] = `Bearer ${token}`;
     return headers;
   },
 
@@ -703,8 +703,12 @@ const userManager = {
   logoutUser: function() {
     // 停止消息刷新定时器
     this.stopMessageRefreshTimer();
-    
-    // 清除本地存储（含 JWT Token）
+
+    // 通知服务端登出：令牌在 HttpOnly Cookie 里，前端无法自行清除，
+    // 必须由服务端 Set-Cookie 过期（同时把令牌加入黑名单）。失败不阻塞本地清理。
+    fetch('/api/logout', { method: 'POST', headers: this.getAuthHeaders() }).catch(() => {});
+
+    // 清除本地存储（令牌已不在 localStorage，这里做兼容清理）
     localStorage.removeItem('forumUser');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');

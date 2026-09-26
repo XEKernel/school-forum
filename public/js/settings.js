@@ -1934,7 +1934,7 @@ const settingsManager = {
       
       const response = await fetch(`/api/users/${userManager.state.currentUser.id}/avatar`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}` },
+        // 令牌在 HttpOnly Cookie 中，同源请求自动携带，无需手动拼 Authorization
         body: formData
       });
       
@@ -1979,8 +1979,7 @@ const settingsManager = {
       utils.showNotification('头像移除中...', 'info');
       
       const response = await fetch(`/api/users/${userManager.state.currentUser.id}/avatar`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}` }
+        method: 'DELETE'
       });
       
       const data = await response.json();

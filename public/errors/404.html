@@ -84,36 +84,11 @@
     </div>
   </div>
 
-  <script>
-    function searchForum() {
-      const searchTerm = document.getElementById('searchInput').value.trim();
-      if (searchTerm) {
-        window.location.href = `../index.html?search=${encodeURIComponent(searchTerm)}`;
-      }
-    }
-    
-    // 允许按Enter键搜索
-    document.getElementById('searchInput').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        searchForum();
-      }
-    });
-    
-    // 自动聚焦搜索框
-    document.getElementById('searchInput').focus();
-  </script>
+  <script src="js/error-404.js"></script>
   
   <!-- 用户管理系统 -->
   <script src="../js/utils.js" defer></script>
   <script src="../js/user.js" defer></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      // 初始化用户管理
-      if (typeof userManager !== 'undefined') {
-        userManager.init();
-        userManager.setupEventListeners();
-      }
-    });
-  </script>
+  <script src="js/error-common.js"></script>
 </body>
 </html>
