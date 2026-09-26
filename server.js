@@ -172,7 +172,14 @@ app.use((req, res, next) => {
   })(req, res, next);
 });
 
-// 5. MongoDB 注入防护（动态配置）
+// 5. 请求体大小限制（从 50MB 降低到可配置值）
+app.use(bodyParser.json({ limit: `${REQUEST_LIMITS.maxBodySize}mb` }));
+app.use(bodyParser.urlencoded({ extended: true, limit: `${REQUEST_LIMITS.maxBodySize}mb` }));
+
+// 6. MongoDB 注入防护（动态配置）
+// ⚠ 必须挂载在 bodyParser 之后：express-mongo-sanitize 只净化「已存在」的 req[key]
+// （见 node_modules/express-mongo-sanitize/index.js:110-121 的 if (req[key]) 判断），
+// 挂在 bodyParser 之前时 req.body 尚未生成，等于从未生效。
 app.use((req, res, next) => {
   const sec = getSecurityConfig();
   if (!sec.mongoSanitizeEnabled) return next();
@@ -186,10 +193,6 @@ app.use((req, res, next) => {
     }
   })(req, res, next);
 });
-
-// 6. 请求体大小限制（从 50MB 降低到可配置值）
-app.use(bodyParser.json({ limit: `${REQUEST_LIMITS.maxBodySize}mb` }));
-app.use(bodyParser.urlencoded({ extended: true, limit: `${REQUEST_LIMITS.maxBodySize}mb` }));
 
 // 6.1. JSON 解析错误统一处理（避免泄露解析器内部细节）
 app.use((err, req, res, next) => {
@@ -208,10 +211,16 @@ app.use((req, res, next) => {
   if (!sec.rateLimitEnabled) return next();
 
   // 排除静态资源请求
+  // ⚠ 后缀排除只对非 /api 路径生效：Express 的 :param 能匹配带点的片段，
+  // 形如 GET /api/followers/xxx.svg 会同时满足「.svg 后缀」与 /followers/:userId 路由，
+  // 若按后缀放行就等于给了绕过限流的免费通道（限流器不执行，路由照常命中）。
+  const isApiRequest = req.path.startsWith('/api/');
   if (req.path.startsWith('/css/') || req.path.startsWith('/js/') ||
       req.path.startsWith('/images/') || req.path.startsWith('/libs/') ||
-      req.path.startsWith('/errors/') || req.path.endsWith('.ico') ||
-      req.path.endsWith('.html') || req.path.endsWith('.svg')) {
+      req.path.startsWith('/errors/') ||
+      (!isApiRequest && (req.path.endsWith('.ico') ||
+                         req.path.endsWith('.html') ||
+                         req.path.endsWith('.svg')))) {
     return next();
   }
 

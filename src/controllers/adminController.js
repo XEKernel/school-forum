@@ -19,6 +19,7 @@ const {
   generateSuccessResponse
 } = require('../utils/validationUtils');
 const { getPaginationConfig } = require('../config/constants');
+const { postCache } = require('../utils/redisUtils');
 const logger = require('../utils/logger');
 const Post = require('../models/Post');
 const User = require('../models/User');
@@ -89,6 +90,10 @@ const adminController = {
 
       // 永久删除帖子
       await permanentDeletePost(postId);
+
+      // 清帖子缓存：postCache TTL 10 分钟，且读取时校验的是缓存快照里的 isDeleted，
+      // 不清缓存则已删内容最多还能读到 10 分钟（作者软删路径每处都清了，管理员路径此前漏了）
+      await postCache.delete(postId);
 
       // 记录管理员永久删除帖子日志
       logger.logSecurityEvent('管理员永久删除帖子', {
