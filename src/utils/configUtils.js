@@ -185,11 +185,31 @@ function readConfig() {
  */
 function writeConfig(config) {
   try {
-    const configStr = JSON.stringify(config, null, 2);
+    // 与磁盘上的原文件合并后再写：readConfig() 走的是白名单过滤后的视图
+    // （mergeWithDefaults），直接写回会把「不在白名单里但确实存在」的键丢掉
+    // —— 实测会把 mongodb.username/password、redis.password 一起抹掉。
+    let onDisk = {};
+    try {
+      onDisk = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    } catch (_) {
+      onDisk = {};
+    }
+    const merged = mergePlainObjects(onDisk, config);
+    const configStr = JSON.stringify(merged, null, 2);
+
     // 原子写：先写临时文件再 rename。直接 writeFileSync 在进程被杀/磁盘满时
     // 会留下半截 JSON，下次启动解析失败 → 整站配置丢失。
+    // ⚠ 权限：rename 会用临时文件的权限覆盖目标文件，而临时文件按 umask 落盘是 644 ——
+    // config.json 里含 MongoDB/Redis 口令，必须显式写 600 并继承原文件权限。
+    let mode = 0o600;
+    try {
+      mode = fs.statSync(CONFIG_FILE).mode & 0o777;
+    } catch (_) {
+      // 目标文件不存在时用 600
+    }
     const tmpFile = `${CONFIG_FILE}.tmp`;
-    fs.writeFileSync(tmpFile, configStr, 'utf8');
+    fs.writeFileSync(tmpFile, configStr, { encoding: 'utf8', mode });
+    fs.chmodSync(tmpFile, mode);
     fs.renameSync(tmpFile, CONFIG_FILE);
     _configCache = null;
     _configCacheTime = 0;
@@ -197,6 +217,26 @@ function writeConfig(config) {
     console.error('写入配置文件失败:', error);
     throw error;
   }
+}
+
+/**
+ * 递归合并普通对象（overlay 覆盖 base），数组与标量以 overlay 为准
+ * 用途：写配置时保留磁盘上应用不管理的键（例如 mongodb/redis 凭据）
+ */
+function mergePlainObjects(base, overlay) {
+  if (Array.isArray(base) || Array.isArray(overlay)) return overlay;
+  if (!base || typeof base !== 'object' || !overlay || typeof overlay !== 'object') return overlay;
+  const out = { ...base };
+  for (const [key, value] of Object.entries(overlay)) {
+    const prev = out[key];
+    if (value && typeof value === 'object' && !Array.isArray(value) &&
+        prev && typeof prev === 'object' && !Array.isArray(prev)) {
+      out[key] = mergePlainObjects(prev, value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 /**
