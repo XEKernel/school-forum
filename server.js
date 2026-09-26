@@ -75,7 +75,7 @@ function checkAuthConfig() {
 const { connectDB, migrateFromJSON } = require('./src/models');
 
 // 导入工具函数
-const { initializeDirectories } = require('./src/utils/dataUtils');
+const { initializeDirectories, migrateAdminRoles } = require('./src/utils/dataUtils');
 const logger = require('./src/utils/logger');
 
 // 导入Redis工具
@@ -413,6 +413,16 @@ async function startServer() {
     logger.logSystemEvent('正在连接 MongoDB...');
     await connectDB(MONGODB_URI, MONGODB_OPTIONS);
     logger.logSuccess('MongoDB 连接成功');
+
+    // 管理员角色迁移：判定已改为 role + UUID 白名单，必须先把存量管理员（白名单里是 QQ）
+    // 迁移为 role='admin' / UUID 条目，否则他们会在本次升级后立刻失去后台权限
+    const adminMigration = await migrateAdminRoles();
+    logger.logSystemEvent('管理员角色迁移完成', adminMigration);
+    if (adminMigration.unresolved.length > 0) {
+      logger.logWarn('管理员白名单中存在无法预授权的条目（未注册账号），请在对方注册后重新添加为管理员', {
+        unresolved: adminMigration.unresolved
+      });
+    }
 
     // 初始化 Redis（带超时，失败时不影响服务启动）
     logger.logSystemEvent('正在连接 Redis...');

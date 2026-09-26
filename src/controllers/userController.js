@@ -20,6 +20,7 @@ const {
   isValidSchoolName,
   isValidClassName,
   isValidSignature,
+  isAdminUser,
   generateErrorResponse,
   generateSuccessResponse
 } = require('../utils/validationUtils');
@@ -608,10 +609,8 @@ const userController = {
         logger.logInfo('登录时自动恢复已过封禁期的账号', { userId: user.id, qq });
       }
 
-      // 检查是否是管理员
-      const { getAdminUsers } = require('../config/constants');
-      const adminUsers = getAdminUsers();
-      const isAdmin = adminUsers.includes(user.qq) || adminUsers.includes(user.id);
+      // 检查是否是管理员（role 优先，其次 UUID 白名单；不再使用可被改绑的 qq 判据）
+      const isAdmin = isAdminUser(user);
 
       // 生成 JWT Token
       const accessToken = generateAccessToken(user.id, {
@@ -1105,10 +1104,8 @@ const userController = {
         user = safeUser;
       }
       
-      // 检查是否是管理员
-      const { getAdminUsers } = require('../config/constants');
-      const adminUsers = getAdminUsers();
-      const isAdmin = adminUsers.includes(user.qq) || adminUsers.includes(user.id);
+      // 检查是否是管理员（role 优先，其次 UUID 白名单；不再使用可被改绑的 qq 判据）
+      const isAdmin = isAdminUser(user);
       
       // 检查用户是否被禁用
       const isBanned = user.isActive === false;
@@ -1268,6 +1265,15 @@ const userController = {
       // 检查新QQ号是否已被其他用户使用
       if (await isQQRegistered(qqNumber) && user.qq !== qqNumber) {
         return res.status(400).json(generateErrorResponse('该QQ号已被其他用户使用'));
+      }
+
+      // 拒绝绑定处于管理员白名单中的 QQ：
+      // 管理员纳新时若把「尚未注册的 QQ」写进白名单，改绑该 QQ 即可拿到后台权限（纳新窗口期漏洞）。
+      // 白名单现已落地为 UUID，这里作为纵深防御继续拦截。
+      const { getAdminUsers } = require('../config/constants');
+      if (getAdminUsers().includes(qqNumber)) {
+        logger.logSecurityEvent('QQ号修改被拒：目标QQ在管理员白名单中', { userId, qqNumber, ip: req.ip });
+        return res.status(403).json(generateErrorResponse('该QQ号已保留给管理员，无法绑定'));
       }
 
       // 更新QQ号
@@ -2466,9 +2472,8 @@ async function buildAuthPayload(user, req) {
     generateAdminToken
   } = require('../middleware/jwtAuth');
 
-  const { getAdminUsers } = require('../config/constants');
-  const adminUsers = getAdminUsers();
-  const isAdmin = adminUsers.includes(user.qq) || adminUsers.includes(user.id);
+  // 管理员判定（role 优先，其次 UUID 白名单；不再使用可被改绑的 qq 判据）
+  const isAdmin = isAdminUser(user);
 
   const accessToken = generateAccessToken(user.id, { username: user.username, qq: user.qq });
   const refreshToken = generateRefreshToken(user.id);

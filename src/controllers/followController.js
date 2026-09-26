@@ -7,7 +7,8 @@ const { v4: uuidv4 } = require('uuid');
 const {
   generateErrorResponse,
   generateSuccessResponse,
-  userExists
+  userExists,
+  isAdminUser
 } = require('../utils/validationUtils');
 const { followCache, notificationCache, userCache } = require('../utils/redisUtils');
 const logger = require('../utils/logger');
@@ -232,10 +233,6 @@ const followController = {
         currentUserFollowingIds = await Follow.getFollowingIds(currentUserId);
       }
 
-      // 检查是否是管理员
-      const { getAdminUsers } = require('../config/constants');
-      const adminUsers = getAdminUsers();
-
       // 组合数据
       const result = followingList.map(f => {
         const user = users.find(u => u.id === f.followingId);
@@ -249,7 +246,7 @@ const followController = {
           grade: user.grade,
           className: user.className,
           followedAt: f.followedAt,
-          isAdmin: adminUsers.includes(user.qq) || adminUsers.includes(user.id),
+          isAdmin: isAdminUser(user),
           isFollowing: currentUserId ? currentUserFollowingIds.includes(user.id) : false
         };
       }).filter(Boolean);
@@ -299,10 +296,6 @@ const followController = {
         currentUserFollowingIds = await Follow.getFollowingIds(currentUserId);
       }
 
-      // 检查是否是管理员
-      const { getAdminUsers } = require('../config/constants');
-      const adminUsers = getAdminUsers();
-
       // 组合数据
       const result = followerList.map(f => {
         const user = users.find(u => u.id === f.followerId);
@@ -316,7 +309,7 @@ const followController = {
           grade: user.grade,
           className: user.className,
           followedAt: f.followedAt,
-          isAdmin: adminUsers.includes(user.qq) || adminUsers.includes(user.id),
+          isAdmin: isAdminUser(user),
           isFollowing: currentUserFollowingIds.includes(user.id)
         };
       }).filter(Boolean);

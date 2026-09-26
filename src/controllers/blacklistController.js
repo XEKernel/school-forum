@@ -4,7 +4,8 @@ const Follow = require('../models/Follow');
 const {
   generateErrorResponse,
   generateSuccessResponse,
-  userExists
+  userExists,
+  isAdminUser
 } = require('../utils/validationUtils');
 const logger = require('../utils/logger');
 
@@ -223,10 +224,6 @@ const blacklistController = {
       const blockedIds = blockedList.map(b => b.blockedId);
       const users = await User.find({ id: { $in: blockedIds } });
 
-      // 检查是否是管理员
-      const { getAdminUsers } = require('../config/constants');
-      const adminUsers = getAdminUsers();
-
       // 组合数据
       const result = blockedList.map(b => {
         const user = users.find(u => u.id === b.blockedId);
@@ -240,7 +237,7 @@ const blacklistController = {
           grade: user.grade,
           className: user.className,
           blockedAt: b.blockedAt,
-          isAdmin: adminUsers.includes(user.qq) || adminUsers.includes(user.id)
+          isAdmin: isAdminUser(user)
         };
       }).filter(Boolean);
 

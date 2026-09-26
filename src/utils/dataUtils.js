@@ -359,6 +359,60 @@ function migrateUserData() {
 
 // ==================== 数据迁移工具 ====================
 
+/**
+ * 管理员角色迁移（幂等，每次启动执行）
+ * 背景：管理员判定由「qq 命中 adminUsers」改为「role === 'admin' 或 id 命中 adminUsers」。
+ * 若直接去掉 qq 判据，现有管理员会立刻失去后台权限，因此先做数据迁移：
+ *   1) 遍历 config.adminUsers
+ *   2) 遗留 QQ 条目（非 UUID）→ 匹配已注册用户，置 role='admin'，并把条目改写为该用户 UUID
+ *   3) UUID 条目 → 确保对应用户 role='admin'
+ *   4) 未注册的 QQ 条目 → 原样保留并计入 unresolved（无法预授权未注册账号：
+ *      任何人只要先改绑该 QQ 就能拿到后台权限，这正是本次修复要关闭的窗口）
+ * @returns {Promise<Object>} { promoted, rewritten, unresolved }
+ */
+async function migrateAdminRoles() {
+  const { getAdminUsers } = require('../config/constants');
+  const { updateConfig } = require('./configUtils');
+
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const entries = getAdminUsers();
+  const nextList = [];
+  const summary = { promoted: [], rewritten: [], unresolved: [] };
+
+  for (const entry of entries) {
+    if (!entry) continue;
+
+    // 条目既可能是用户 UUID，也可能是遗留的 QQ 号
+    const user = UUID_RE.test(entry)
+      ? await User.findOne({ id: entry }).select('id role').lean()
+      : await User.findOne({ qq: entry }).select('id role').lean();
+
+    if (!user) {
+      summary.unresolved.push(entry);
+      nextList.push(entry);
+      continue;
+    }
+
+    if (user.role !== 'admin') {
+      await User.updateOne({ id: user.id }, { $set: { role: 'admin' } });
+      summary.promoted.push(user.id);
+    }
+    if (entry !== user.id) {
+      summary.rewritten.push(`${entry} → ${user.id}`);
+    }
+    nextList.push(user.id);
+  }
+
+  // 白名单统一落地为 UUID（去重且保持顺序）
+  const deduped = [...new Set(nextList)];
+  if (JSON.stringify(deduped) !== JSON.stringify(entries)) {
+    updateConfig({ adminUsers: deduped });
+    summary.listUpdated = true;
+  }
+
+  return summary;
+}
+
 // 从 JSON 文件迁移数据到 MongoDB
 async function migrateFromJSON() {
   console.log('开始从 JSON 文件迁移数据到 MongoDB...');
@@ -521,6 +575,7 @@ module.exports = {
   
   // 迁移工具
   migrateFromJSON,
+  migrateAdminRoles,
   
   // 导出模型（供直接使用）
   User,

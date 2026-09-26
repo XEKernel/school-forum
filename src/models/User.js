@@ -215,6 +215,15 @@ const UserSchema = new Schema({
     type: Boolean,
     default: true
   },
+  // 角色：管理员权限的唯一权威来源（配合 config.adminUsers 的 UUID 白名单）
+  // 说明：此前用「qq 是否命中 adminUsers」判定管理员，而 qq 是注册时自填、且可通过
+  // changeQQ 修改的字段 —— 未注册的 QQ 一旦进入白名单，任何人都能改绑该 QQ 拿到后台权限。
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user',
+    index: true
+  },
   settings: {
     type: UserSettingsSchema,
     default: () => ({})

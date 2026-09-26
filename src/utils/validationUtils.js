@@ -205,12 +205,30 @@ function validatePassword(password) {
 }
 
 /**
+ * 管理员判定（全项目唯一入口）
+ * 判据：role === 'admin'，或用户 id 命中 config.adminUsers（UUID 白名单）
+ * ⚠ 绝不再用 qq 判据：qq 是注册时自填、且可被 changeQQ 改绑的字段。
+ *   为「尚未注册的 QQ」预授权，等于把后台权限交给任何先抢占该 QQ 的人（纳新窗口期即漏洞）。
+ * @param {Object} user - 用户对象（需含 id；role 缺省视为普通用户）
+ * @returns {boolean}
+ */
+function isAdminUser(user) {
+  if (!user || !user.id) {
+    return false;
+  }
+  if (user.role === 'admin') {
+    return true;
+  }
+  const { getAdminUsers } = require('../config/constants');
+  return getAdminUsers().includes(user.id);
+}
+
+/**
  * 验证管理员权限
  * @param {string} adminId - 管理员用户ID
  * @returns {Promise<Object>} - { valid: boolean, message: string, user?: Object }
  */
 async function validateAdminPermission(adminId) {
-  const { getAdminUsers } = require('../config/constants');
   const { getUserById } = require('./dataUtils');
   
   if (!adminId) {
@@ -229,11 +247,8 @@ async function validateAdminPermission(adminId) {
       return { valid: false, message: '该账号已被禁用' };
     }
     
-    // 检查是否是管理员（通过QQ或ID）
-    const adminUsers = getAdminUsers();
-    const isAdmin = adminUsers.includes(user.qq) || adminUsers.includes(user.id);
-    
-    if (!isAdmin) {
+    // 检查是否是管理员（role 优先，其次 UUID 白名单；不再使用 qq 判据）
+    if (!isAdminUser(user)) {
       return { valid: false, message: '无管理员权限' };
     }
     
@@ -302,6 +317,7 @@ module.exports = {
   isValidClassName,
   isValidSignature,
   validatePassword,
+  isAdminUser,
   validateAdminPermission,
   postExists,
   commentExists,
