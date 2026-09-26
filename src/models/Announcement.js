@@ -109,6 +109,9 @@ announcementSchema.statics.getActiveAnnouncements = async function(position = nu
     .sort({ isPinned: -1, createdAt: -1 });
 };
 
+// 索引：活跃公告查询按 isActive + 有效期筛选，此前只有 _id 索引（审查报告 🔵46）
+announcementSchema.index({ isActive: 1, startTime: 1, endTime: 1 });
+
 // 实例方法：检查是否在有效期内
 announcementSchema.methods.isValid = function() {
   const now = new Date();

@@ -408,6 +408,17 @@ const messageController = {
         await message.save();
       }
 
+      // 双方都删除后这条记录已无任何可见方，直接删除（此前只打标记，记录永久残留）
+      const bothDeleted = message.deletedBy.includes(message.senderId) && message.deletedBy.includes(message.receiverId);
+      if (bothDeleted) {
+        await Message.deleteOne({ id: message.id });
+        if (message.imageUrl) {
+          const { removeImageFiles } = require('../middleware/uploadMiddleware');
+          await removeImageFiles([message.imageUrl]);
+        }
+        logger.logInfo('私信双方均已删除，清理记录', { messageId });
+      }
+
       res.json(generateSuccessResponse({}, '消息已删除'));
     } catch (error) {
       logger.logError('删除消息失败', { error: error.message });
@@ -440,11 +451,44 @@ const messageController = {
         { $addToSet: { deletedBy: userId } }
       );
 
-      res.json(generateSuccessResponse({}, '会话已清空'));
+      // 双方都清空过该会话后，记录已无可见方 → 清理会话内的消息（含图片文件）
+      const cleaned = await messageController._cleanupFullyDeletedMessages(conversationId, conversation.participants);
+
+      res.json(generateSuccessResponse({ cleanedMessages: cleaned }, '会话已清空'));
     } catch (error) {
       logger.logError('删除会话失败', { error: error.message });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
+  },
+
+  /**
+   * 清理会话中「双方都已删除」的消息（含其图片文件）
+   * @param {string} conversationId
+   * @param {string[]} participants - 会话参与者
+   * @returns {Promise<number>} 实际删除的消息条数
+   */
+  async _cleanupFullyDeletedMessages(conversationId, participants = []) {
+    if (!Array.isArray(participants) || participants.length < 2) return 0;
+    let removed = 0;
+    try {
+      const messages = await Message.find({ conversationId }).lean();
+      for (const msg of messages) {
+        const deletedBy = msg.deletedBy || [];
+        if (!participants.every(p => deletedBy.includes(p))) continue;
+        await Message.deleteOne({ id: msg.id });
+        if (msg.imageUrl) {
+          const { removeImageFiles } = require('../middleware/uploadMiddleware');
+          await removeImageFiles([msg.imageUrl]);
+        }
+        removed++;
+      }
+      if (removed > 0) {
+        logger.logInfo('会话双方均已清空，清理私信记录', { conversationId, removed });
+      }
+    } catch (error) {
+      logger.logError('清理已删除私信失败', { conversationId, error: error.message });
+    }
+    return removed;
   },
 
   /**

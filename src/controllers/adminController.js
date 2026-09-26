@@ -112,12 +112,19 @@ const adminController = {
       // 清理关联数据：收藏与通知（举报记录保留作为治理凭据）
       await cleanupPostRelations(postId);
 
+      // 清理落盘图片（永久删除才做；软删可被恢复，不能动文件）
+      // 此前只删库记录，public/images 里的文件成为永久垃圾
+      const { removeImageFiles } = require('../middleware/uploadMiddleware');
+      const imageCleanup = await removeImageFiles(post.images || []);
+
       // 记录管理员永久删除帖子日志
       logger.logSecurityEvent('管理员永久删除帖子', {
         adminId,
         postId,
         postAuthor: post.username,
         reason: reason || '无',
+        imageFilesDeleted: imageCleanup.deleted,
+        imageFilesFailed: imageCleanup.failed,
         ip: req.ip
       });
       

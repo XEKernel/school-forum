@@ -217,6 +217,27 @@ const postController = {
       } else {
         // 内存精排：取过滤后按时间倒序的候选集（上限取自配置 pagination.maxCandidates，默认 1000）再精排分页
         const MAX_CANDIDATES = getPaginationConfig().maxCandidates || 1000;
+
+        // 资源放大防护（审查报告 🟡22）：匿名 + 无搜索/栏目筛选的 relevance 结果是
+        // 全站共享且短时间内稳定的，用 hotPostsCache（5 分钟 TTL，发帖/删帖/编辑时已清）
+        // 缓存「已排序的帖子 id 列表」，命中时跳过 1000 条候选读取与 Favorite 聚合。
+        const relevanceCacheable = sortBy === 'relevance' && !viewerId && !search && !categoryId;
+        const cacheKeyPrefix = 'anonymous-public';
+        let cachedIds = null;
+        if (relevanceCacheable) {
+          const cached = await hotPostsCache.get();
+          if (cached && cached.scope === cacheKeyPrefix && Array.isArray(cached.ids)) {
+            cachedIds = cached.ids;
+          }
+        }
+
+        if (cachedIds) {
+          const pageIds = cachedIds.slice((page - 1) * limit, (page - 1) * limit + limit);
+          const fromDb = await Post.find({ id: { $in: pageIds } }).lean();
+          const byId = new Map(fromDb.map(d => [d.id, d]));
+          posts = pageIds.map(id => byId.get(id)).filter(Boolean);
+          logger.logInfo('命中热门缓存，跳过内存精排', { sortBy, page, limit, cached: cachedIds.length });
+        } else {
         const candidates = await Post.find(query).sort({ timestamp: -1 }).limit(MAX_CANDIDATES).lean();
 
         let favoriteMap = {};
@@ -279,6 +300,15 @@ const postController = {
 
         withFav.sort(sortFunctions[sortBy] || sortFunctions.latest);
         posts = withFav.slice((page - 1) * limit, (page - 1) * limit + limit);
+
+        // 回填缓存：只缓存前 200 条的 id 顺序（够翻若干页，避免缓存体积随候选集膨胀）
+        if (relevanceCacheable && withFav.length > 0) {
+          await hotPostsCache.set({
+            scope: cacheKeyPrefix,
+            ids: withFav.slice(0, 200).map(p => p.id)
+          });
+        }
+        }
       }
 
       // ============ 3. 用户头像 + 栏目（批量查询，不再全量加载用户） ============
@@ -945,6 +975,10 @@ const postController = {
         // 递减被删回复作者的评论数（回复在 addReply 里会 +1，此前删除侧从不扣减）
         await adjustUserCommentCount(nestedReply.userId, -1);
 
+        // 清理该回复附带的图片文件（记录已删，文件不该留在 public/images 当垃圾）
+        const { removeImageFiles } = require('../middleware/uploadMiddleware');
+        await removeImageFiles(nestedReply.images || []);
+
         return res.json(generateSuccessResponse({}, '嵌套回复删除成功'));
       }
       
@@ -984,6 +1018,13 @@ const postController = {
           logger.logInfo('删除回复时级联清理嵌套回复', { postId, replyId, cascaded: orphanNested.length });
         }
 
+        // 清理被删回复及其嵌套回复的图片文件
+        const { removeImageFiles } = require('../middleware/uploadMiddleware');
+        await removeImageFiles([
+          ...(reply.images || []),
+          ...orphanNested.flatMap(o => o.images || [])
+        ]);
+
         return res.json(generateSuccessResponse({}, '回复删除成功'));
       }
       
@@ -995,10 +1036,13 @@ const postController = {
 
       // 级联删除：该评论下的所有回复与嵌套回复一并删除（否则成为永远读不到的孤儿数据）
       const cascadedAuthors = [];
+      const cascadedImages = [];
       for (const r of (Array.isArray(comment.replies) ? comment.replies : [])) {
         cascadedAuthors.push(r.userId);
+        if (Array.isArray(r.images)) cascadedImages.push(...r.images);
         for (const n of (Array.isArray(r.replies) ? r.replies : [])) {
           cascadedAuthors.push(n.userId);
+          if (Array.isArray(n.images)) cascadedImages.push(...n.images);
         }
       }
 
@@ -1016,6 +1060,10 @@ const postController = {
       if (cascadedAuthors.length > 0) {
         logger.logInfo('删除评论时级联清理回复', { postId, commentId, cascaded: cascadedAuthors.length });
       }
+
+      // 清理被删评论及其级联回复的图片文件
+      const { removeImageFiles } = require('../middleware/uploadMiddleware');
+      await removeImageFiles([...(comment.images || []), ...cascadedImages]);
 
       res.json(generateSuccessResponse({}, '评论删除成功'));
     } catch (error) {

@@ -91,8 +91,9 @@ const NotificationSchema = new Schema({
   // 通用字段
   timestamp: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
+    // 不再在字段上声明 index：与下面的 schema 级 timestamp: -1 会并存成两个索引，
+    // 查询实际按倒序，保留倒序那个即可（审查报告 🔵46）
   },
   read: {
     type: Boolean,

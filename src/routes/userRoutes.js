@@ -118,7 +118,9 @@ router.get('/auth/qq/callback', userController.qqCallback);
 // 前端取 QQ 授权结果（state 为凭证）
 router.get('/auth/qq/result', userController.getQqResult);
 // QQ 新用户补全资料并注册
-router.post('/auth/qq/complete-profile', userController.qqCompleteProfile);
+// QQ 补全资料注册（未鉴权 + 会创建账号）：挂严格限流，避免批量建号
+// （审查报告 🟡26：正常注册有验证码+严格限流，QQ 路径两者皆无）
+router.post('/auth/qq/complete-profile', rateLimiters.strict, userController.qqCompleteProfile);
 // 解绑 QQ
 router.post('/auth/qq/unbind', authenticateUser, userController.unbindQq);
 // 查询 QQ 绑定状态（设置页）

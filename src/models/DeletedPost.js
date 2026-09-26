@@ -69,8 +69,8 @@ const DeletedPostSchema = new Schema({
   },
   deletedAt: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
+    // 同上：去重字段级 index，保留 schema 级 deletedAt: -1
   },
   deletedBy: {
     type: String,

@@ -3421,13 +3421,20 @@ confirmDeletePost: async function() {
             return;
         }
 
-        // 再次确认（针对危险操作）
+        // 二次确认（针对危险操作）
         if (level <= 2) {
             const finalConfirm = prompt(`这是最后一步确认！\n请再次输入 "${expectedConfirmation}" 以确认执行：`);
             if (finalConfirm !== expectedConfirmation) {
                 this.showNotification('确认取消', 'info');
                 return;
             }
+        }
+
+        // 二次因子：服务端要求重输管理员登录密码（确认串在源码里公开，单靠它不够）
+        const adminPassword = prompt('请输入当前管理员账号的登录密码以执行该操作：');
+        if (!adminPassword) {
+            this.showNotification('已取消：必须输入管理员密码', 'info');
+            return;
         }
 
         try {
@@ -3438,12 +3445,10 @@ confirmDeletePost: async function() {
             
             const response = await this.fetchWithTimeout(endpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: this.getAdminHeaders(),
                 body: JSON.stringify({
-                    adminId: this.state.currentAdmin.id,
-                    confirmation: expectedConfirmation
+                    confirmation: expectedConfirmation,
+                    password: adminPassword
                 }),
                 timeout: 60000  // 自毁操作使用 60 秒超时
             });
@@ -3465,7 +3470,11 @@ confirmDeletePost: async function() {
                 } else if (level === 1 && data.data) {
                     message += `：已删除 ${data.data.deletedCount || 0} 个文件`;
                 }
-                
+                if (data.data && data.data.backupFile) {
+                    message += `\n数据快照：${data.data.backupFile}`;
+                    console.warn('[自毁] 数据快照已生成:', data.data.backupFile);
+                }
+
                 this.showNotification(message, 'success');
                 this.updateRunModeUI({ mode: 'self_destruct', selfDestructLevel: level });
 

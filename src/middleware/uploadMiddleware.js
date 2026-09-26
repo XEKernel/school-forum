@@ -176,5 +176,41 @@ module.exports = {
   upload,
   createUploadMiddleware,
   processUploadedFiles,
-  verifyImageMagicBytes
+  verifyImageMagicBytes,
+  removeImageFiles
 };
+
+/**
+ * 删除图片文件（帖子/评论/私信被永久删除后清理落盘文件）
+ * 只允许删除 IMAGES_DIR 内的文件：url 里可能带有客户端构造的路径，
+ * 解析后必须仍在图片目录内，避免被当成任意文件删除原语。
+ * @param {Array<string|{url?:string}>} images - 图片 url 列表或图片对象列表
+ * @returns {Promise<{deleted:number, failed:number}>}
+ */
+async function removeImageFiles(images) {
+  const result = { deleted: 0, failed: 0 };
+  if (!Array.isArray(images) || images.length === 0) return result;
+
+  const baseDir = path.resolve(IMAGES_DIR);
+
+  for (const item of images) {
+    const rawUrl = typeof item === 'string' ? item : (item && item.url);
+    if (!rawUrl || typeof rawUrl !== 'string') continue;
+    // 只处理本站 /images/xxx 形式的相对路径
+    const match = /^\/images\/([^/\\]+)$/.exec(rawUrl.split('?')[0]);
+    if (!match) continue;
+
+    const filePath = path.resolve(baseDir, match[1]);
+    if (!filePath.startsWith(baseDir + path.sep)) continue;
+
+    try {
+      await fs.promises.unlink(filePath);
+      result.deleted++;
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        result.failed++;
+      }
+    }
+  }
+  return result;
+}
