@@ -453,8 +453,12 @@ async function startServer() {
     }
 
     // 启动 Express 服务器
-    httpServer = app.listen(PORT, () => {
+    // HOST 默认 0.0.0.0（保持既有行为）；部署在反向代理之后可设 HOST=127.0.0.1，
+    // 让 Node 只监听回环、由 Nginx/Caddy 统一对外
+    const HOST = process.env.HOST || '0.0.0.0';
+    httpServer = app.listen(PORT, HOST, () => {
       logger.logSuccess('服务器启动成功', {
+        host: HOST,
         port: PORT,
         dataDir: DATA_DIR,
         imagesDir: IMAGES_DIR

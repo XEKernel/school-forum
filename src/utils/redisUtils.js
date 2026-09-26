@@ -1506,10 +1506,7 @@ const captchaCache = {
    */
   async set(captchaId, code) {
     if (!isConnected) {
-      // Redis 不可用时使用内存 fallback
-      if (!this._memoryStore) this._memoryStore = new Map();
-      this._memoryStore.set(captchaId, { code, expireAt: Date.now() + this.EXPIRE_TIME * 1000 });
-      return true;
+      return this._setToMemory(captchaId, code);
     }
     try {
       const client = getRedisClient();
@@ -1517,10 +1514,22 @@ const captchaCache = {
       return true;
     } catch (error) {
       // fallback 到内存
-      if (!this._memoryStore) this._memoryStore = new Map();
-      this._memoryStore.set(captchaId, { code, expireAt: Date.now() + this.EXPIRE_TIME * 1000 });
-      return true;
+      return this._setToMemory(captchaId, code);
     }
+  },
+
+  /**
+   * 写入进程内存储（Redis 不可用时的兜底）
+   * 顺带清理已过期条目：这里此前只增不删，长期无 Redis 运行时 Map 会持续膨胀
+   */
+  _setToMemory(captchaId, code) {
+    if (!this._memoryStore) this._memoryStore = new Map();
+    const now = Date.now();
+    for (const [key, entry] of this._memoryStore) {
+      if (entry.expireAt <= now) this._memoryStore.delete(key);
+    }
+    this._memoryStore.set(captchaId, { code, expireAt: now + this.EXPIRE_TIME * 1000 });
+    return true;
   },
 
   /**
