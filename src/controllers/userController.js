@@ -16,6 +16,10 @@ const {
   isUsernameExists,
   userExists,
   isUserActive,
+  isValidUsername,
+  isValidSchoolName,
+  isValidClassName,
+  isValidSignature,
   generateErrorResponse,
   generateSuccessResponse
 } = require('../utils/validationUtils');
@@ -369,6 +373,17 @@ const userController = {
       if (validationErrors.length > 0) {
         logger.logWarn('用户注册失败：验证错误', { qq, username, errors: validationErrors });
         return res.status(400).json(generateErrorResponse(validationErrors[0]));
+      }
+
+      // 字符集强校验（服务端最后一道防线：防止把 HTML/脚本片段存进资料字段）
+      if (!isValidUsername(username)) {
+        return res.status(400).json(generateErrorResponse('用户名格式不正确：2-20位中文、字母、数字或下划线'));
+      }
+      if (!isValidSchoolName(school)) {
+        return res.status(400).json(generateErrorResponse('学校名称格式不正确：2-50个字符，不能包含 < > " \' ` \\ 等特殊字符'));
+      }
+      if (!isValidClassName(className)) {
+        return res.status(400).json(generateErrorResponse('班级格式不正确：1-30个字符，不能包含 < > " \' ` \\ 等特殊字符'));
       }
 
       // 验证邮箱
@@ -830,6 +845,10 @@ const userController = {
       
       // 更新用户名（如果提供了）
       if (username && username !== user.username) {
+        // 字符集强校验：用户名不允许 HTML/JS 危险字符
+        if (!isValidUsername(username)) {
+          return res.status(400).json(generateErrorResponse('用户名格式不正确：2-20位中文、字母、数字或下划线'));
+        }
         // 检查用户名是否已存在（直接查询，避免全量加载）
         const existingUser = await User.findOne({ username, id: { $ne: userId } });
         if (existingUser) {
@@ -840,6 +859,9 @@ const userController = {
       
       // 更新学校（如果提供了）
       if (school && school !== user.school) {
+        if (!isValidSchoolName(school)) {
+          return res.status(400).json(generateErrorResponse('学校名称格式不正确：2-50个字符，不能包含 < > " \' ` \\ 等特殊字符'));
+        }
         updateData.school = school;
       }
       
@@ -853,6 +875,9 @@ const userController = {
       
       // 更新班级（如果提供了）
       if (className && className !== user.className) {
+        if (!isValidClassName(className)) {
+          return res.status(400).json(generateErrorResponse('班级格式不正确：1-30个字符，不能包含 < > " \' ` \\ 等特殊字符'));
+        }
         updateData.className = className;
       }
       
@@ -873,6 +898,9 @@ const userController = {
       
       // 更新个性签名（如果提供了）
       if (signature !== undefined) {
+        if (!isValidSignature(signature)) {
+          return res.status(400).json(generateErrorResponse('个性签名不能超过100个字符，且不能包含 < >'));
+        }
         const currentSettings = user.settings || {};
         updateData.settings = { ...currentSettings, ...updateData.settings, signature: signature || '' };
       }
@@ -916,6 +944,11 @@ const userController = {
       
       if (!settings || typeof settings !== 'object' || Object.keys(settings).length === 0) {
         return res.status(400).json(generateErrorResponse('设置数据无效'));
+      }
+
+      // 本接口同样能写 settings.signature，必须与 updateUserProfile 同层校验（否则可绕过）
+      if (settings.signature !== undefined && !isValidSignature(settings.signature)) {
+        return res.status(400).json(generateErrorResponse('个性签名不能超过100个字符，且不能包含 < >'));
       }
       
       const user = await getUserById(userId);
@@ -2107,6 +2140,17 @@ const userController = {
       if (!username || !username.trim()) return res.status(400).json(generateErrorResponse('用户名不能为空'));
       if (!school || !school.trim()) return res.status(400).json(generateErrorResponse('学校不能为空'));
       if (!className || !className.trim()) return res.status(400).json(generateErrorResponse('班级不能为空'));
+
+      // 字符集强校验（QQ 注册是与邮箱注册并列的用户创建入口，同样必须过这一层）
+      if (!isValidUsername(username.trim())) {
+        return res.status(400).json(generateErrorResponse('用户名格式不正确：2-20位中文、字母、数字或下划线'));
+      }
+      if (!isValidSchoolName(school)) {
+        return res.status(400).json(generateErrorResponse('学校名称格式不正确：2-50个字符，不能包含 < > " \' ` \\ 等特殊字符'));
+      }
+      if (!isValidClassName(className)) {
+        return res.status(400).json(generateErrorResponse('班级格式不正确：1-30个字符，不能包含 < > " \' ` \\ 等特殊字符'));
+      }
 
       // 用户名冲突加后缀
       let finalUsername = username.trim();

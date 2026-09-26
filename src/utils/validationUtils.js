@@ -131,6 +131,59 @@ function isValidUsername(username) {
 }
 
 /**
+ * 结构化短字段校验（学校 / 班级等）
+ * 禁止 HTML/JS 危险字符并限制最大长度。
+ * 目的：即使前端某处漏转义，也无法构造标签或从内联属性 / JS 字符串中逃逸。
+ * @param {string} value - 待校验文本
+ * @param {number} maxLength - 最大长度
+ * @returns {boolean}
+ */
+function isSafeStructuredText(value, maxLength) {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  // 危险字符：标签边界 < >、属性引号 " '、JS 字符串转义 ` \、路径与协议分隔 / :、控制字符
+  if (/[<>"'`\\/:\u0000-\u001f\u007f]/.test(value)) {
+    return false;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 && trimmed.length <= maxLength;
+}
+
+/**
+ * 验证学校名称（2-50 字符，禁止 HTML/JS 危险字符）
+ * @param {string} school - 学校名称
+ * @returns {boolean}
+ */
+function isValidSchoolName(school) {
+  return isSafeStructuredText(school, 50);
+}
+
+/**
+ * 验证班级名称（1-30 字符，禁止 HTML/JS 危险字符）
+ * @param {string} className - 班级名称
+ * @returns {boolean}
+ */
+function isValidClassName(className) {
+  return isSafeStructuredText(className, 30);
+}
+
+/**
+ * 验证个性签名（最长 100 字符，允许换行，禁止 < >）
+ * @param {string} signature - 个性签名
+ * @returns {boolean}
+ */
+function isValidSignature(signature) {
+  if (typeof signature !== 'string') {
+    return false;
+  }
+  if (signature.length > 100) {
+    return false;
+  }
+  return !/[<>]/.test(signature);
+}
+
+/**
  * 验证密码强度
  * @param {string} password - 密码
  * @returns {Object} - { valid: boolean, message: string }
@@ -245,6 +298,9 @@ module.exports = {
   isValidPostId,
   isValidQQ,
   isValidUsername,
+  isValidSchoolName,
+  isValidClassName,
+  isValidSignature,
   validatePassword,
   validateAdminPermission,
   postExists,
