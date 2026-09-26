@@ -1,11 +1,19 @@
 // 工具函数模块
 const utils = {
   // HTML 转义函数
+  // 安全说明：原实现走 div.textContent → div.innerHTML，DOM 序列化只转义
+  // & < > 与 NBSP，**不处理 " 和 '** —— 因此它只对"文本位置"安全，用在
+  // alt="${...}" / onclick="...('${...}')" 这类**属性位置**时可被闭合属性注入
+  // （例：上传文件名 originalname 里带引号、用户名里带引号）。
+  // 这里补上引号转义，使它对文本与属性两种上下文都安全；文本位置使用不变
+  // （&quot; / &#39; 在页面上渲染出来仍是 " 和 '）。
   escapeHtml: function(text) {
     if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
-    return div.innerHTML;
+    return div.innerHTML
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   },
 
   // 检测并转换危险 HTML 内容为 Markdown 代码块

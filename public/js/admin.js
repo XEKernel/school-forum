@@ -641,11 +641,28 @@ renderPostsList: function(posts) {
 },
 
         // HTML转义函数，防止XSS攻击
+        // 安全说明：补上引号转义。原实现走 div.textContent → div.innerHTML，DOM 序列化
+        // 只转义 & < > 与 NBSP，不处理 " 和 '，因此它只对"文本位置"安全；一旦用在
+        // alt="${...}" / url('${...}') 这类属性位置，就能被闭合属性注入。
         escapeHtml: function(text) {
         if (!text) return '';
         const div = document.createElement('div');
         div.textContent = text;
-        return div.innerHTML;
+        return div.innerHTML
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        },
+
+        // 专门用于「内联事件处理器内的单引号 JS 字符串」的转义。
+        // 不能用 escapeHtml 代替：HTML 实体在属性解析阶段会被解码回 ' ，
+        // 于是 onclick="fn('x&#39;);alert(1)//')" 里的 &#39; 解码后重新闭合了
+        // JS 字符串，注入依然成立。正确做法是先做 JS 转义（\ 和 '），再做属性转义。
+        escapeJsAttr: function(text) {
+        if (text === null || text === undefined) return '';
+        const jsEscaped = String(text)
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'");
+        return this.escapeHtml(jsEscaped);
         },
 
     // 加载用户列表
