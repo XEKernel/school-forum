@@ -67,6 +67,23 @@ function createUploadMiddleware() {
 // 创建默认的 multer 实例（向后兼容）
 const upload = createUploadMiddleware();
 
+/**
+ * 净化上传文件原名
+ * 落盘文件名始终是 UUID + 白名单扩展名，originalname 仅用于展示/记录；
+ * 但它会被回传前端并入库，因此仍需去掉 HTML/JS/路径上下文有特殊含义的字符
+ * @param {string} name - 原始文件名（客户端可任意构造）
+ * @returns {string} - 净化后的文件名
+ */
+function sanitizeOriginalName(name) {
+  if (!name || typeof name !== 'string') {
+    return '';
+  }
+  return name
+    .replace(/[<>"'`\\/\u0000-\u001f\u007f]/g, '')
+    .trim()
+    .slice(0, 100);
+}
+
 // 处理上传的文件信息
 function processUploadedFiles(files) {
   if (!files || files.length === 0) {
@@ -76,7 +93,7 @@ function processUploadedFiles(files) {
   return files.map(file => ({
     id: uuidv4(),
     filename: file.filename,
-    originalname: file.originalname,
+    originalname: sanitizeOriginalName(file.originalname),
     size: file.size,
     mimetype: file.mimetype,
     url: `/images/${file.filename}`,

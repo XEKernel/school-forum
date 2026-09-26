@@ -54,8 +54,8 @@ displayAdminInfo: function() {
   if (adminInfo && this.state.currentAdmin) {
     adminInfo.innerHTML = `
       <i class="fas fa-user-shield"></i>
-      当前管理员: ${this.state.currentAdmin.username} <span style="color: #dc2626; margin-left: 5px; font-size: 14px;">管理员</span> |
-      ${this.state.currentAdmin.school} ${this.state.currentAdmin.grade} ${this.state.currentAdmin.className}
+      当前管理员: ${this.escapeHtml(this.state.currentAdmin.username)} <span style="color: #dc2626; margin-left: 5px; font-size: 14px;">管理员</span> |
+      ${this.escapeHtml(this.state.currentAdmin.school)} ${this.escapeHtml(this.state.currentAdmin.grade)} ${this.escapeHtml(this.state.currentAdmin.className)}
     `;
   }
 },
@@ -627,10 +627,10 @@ renderPostsList: function(posts) {
       </td>
       <td>
         <div class="action-buttons">
-          <button class="action-btn btn-info" onclick="adminManager.viewPostDetail('${esc(post.id)}')">
+          <button class="action-btn btn-info" onclick="adminManager.viewPostDetail('${this.escapeJsAttr(post.id)}')">
             <i class="fas fa-eye"></i> 详情
           </button>
-          <button class="action-btn btn-danger" onclick="adminManager.showDeletePostModal('${esc(post.id)}')">
+          <button class="action-btn btn-danger" onclick="adminManager.showDeletePostModal('${this.escapeJsAttr(post.id)}')">
             <i class="fas fa-trash"></i> 删除
           </button>
         </div>
@@ -744,10 +744,10 @@ renderPostsList: function(posts) {
                 <td>
                     <div class="action-buttons">
                         ${user.isActive === false ? 
-                            `<button class="action-btn btn-success" onclick="adminManager.showUnbanModal('${esc(user.id)}', '${esc(user.username)}')">
+                            `<button class="action-btn btn-success" onclick="adminManager.showUnbanModal('${this.escapeJsAttr(user.id)}', '${this.escapeJsAttr(user.username)}')">
                                 <i class="fas fa-unlock"></i> 解封
                             </button>` :
-                            `<button class="action-btn btn-warning" onclick="adminManager.showBanModal('${esc(user.id)}', '${esc(user.username)}')">
+                            `<button class="action-btn btn-warning" onclick="adminManager.showBanModal('${this.escapeJsAttr(user.id)}', '${this.escapeJsAttr(user.username)}')">
                                 <i class="fas fa-ban"></i> 封禁
                             </button>`
                         }
@@ -814,7 +814,7 @@ loadBannedUsers: async function() {
                 <td>${esc(user.bannedBy || '系统')}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="action-btn btn-success" onclick="adminManager.showUnbanModal('${esc(user.id)}', '${esc(user.username)}')">
+                        <button class="action-btn btn-success" onclick="adminManager.showUnbanModal('${this.escapeJsAttr(user.id)}', '${this.escapeJsAttr(user.username)}')">
                             <i class="fas fa-unlock"></i> 解封
                         </button>
                     </div>
@@ -1260,7 +1260,7 @@ loadBannedUsers: async function() {
                 <td><strong>${stat.count}</strong> 次</td>
                 <td>${stat.lastAccess ? this.formatDate(stat.lastAccess) : '-'}</td>
                 <td>
-                    <button class="action-btn btn-danger" onclick="adminManager.clearIpStat('${this.escapeHtml(stat.ip)}')" title="清除">
+                    <button class="action-btn btn-danger" onclick="adminManager.clearIpStat('${this.escapeJsAttr(stat.ip)}')" title="清除">
                         <i class="fas fa-trash"></i> 清除
                     </button>
                 </td>
@@ -1462,10 +1462,10 @@ loadBannedUsers: async function() {
                     <p>${this.escapeHtml(classInfoText)}</p>
                 </div>
                 <div class="school-actions">
-                    <button onclick="adminManager.editSchool('${school.id}')" class="action-btn btn-info" style="padding: 5px 10px;">
+                    <button onclick="adminManager.editSchool('${this.escapeJsAttr(school.id)}')" class="action-btn btn-info" style="padding: 5px 10px;">
                         <i class="fas fa-edit"></i> 编辑
                     </button>
-                    <button onclick="adminManager.deleteSchool('${school.id}', '${this.escapeHtml(school.name)}')" class="action-btn btn-danger" style="padding: 5px 10px;">
+                    <button onclick="adminManager.deleteSchool('${this.escapeJsAttr(school.id)}', '${this.escapeJsAttr(school.name)}')" class="action-btn btn-danger" style="padding: 5px 10px;">
                         <i class="fas fa-trash"></i> 删除
                     </button>
                 </div>
@@ -1909,7 +1909,7 @@ loadBannedUsers: async function() {
                     </div>
                 </div>
                 <div class="admin-actions">
-                    <button onclick="adminManager.showDeleteAdminModal('${admin.id}', '${this.escapeHtml(admin.username)}')" 
+                    <button onclick="adminManager.showDeleteAdminModal('${this.escapeJsAttr(admin.id)}', '${this.escapeJsAttr(admin.username)}')" 
                             class="action-btn btn-danger"
                             title="删除管理员">
                         <i class="fas fa-trash"></i> 删除
@@ -2090,7 +2090,7 @@ loadBannedUsers: async function() {
             gradeContainer.innerHTML = Object.entries(stats.gradeDistribution)
                 .map(([grade, count]) => `
                     <div class="distribution-item">
-                        <span>${grade}</span>
+                        <span>${this.escapeHtml(grade)}</span>
                         <span>${count} 人</span>
                     </div>
                 `).join('');
@@ -2102,7 +2102,7 @@ loadBannedUsers: async function() {
             schoolContainer.innerHTML = Object.entries(stats.schoolDistribution)
                 .map(([school, count]) => `
                     <div class="distribution-item">
-                        <span>${school}</span>
+                        <span>${this.escapeHtml(school)}</span>
                         <span>${count} 人</span>
                     </div>
                 `).join('');
@@ -2115,9 +2115,9 @@ loadBannedUsers: async function() {
                 .map((user, index) => `
                     <div class="distribution-item">
                         <div>
-                            <strong>${index + 1}. ${user.username}</strong>
+                            <strong>${index + 1}. ${this.escapeHtml(user.username)}</strong>
                             <div style="font-size: 12px; color: #666;">
-                                ${user.school} · ${user.grade}
+                                ${this.escapeHtml(user.school)} · ${this.escapeHtml(user.grade)}
                             </div>
                         </div>
                         <div style="text-align: right;">
@@ -2402,7 +2402,7 @@ confirmDeletePost: async function() {
                     ` : ''}
                 </td>
                 <td>
-                    <div style="font-size: 12px; cursor: pointer; color: var(--primary-color);" onclick="adminManager.viewPostDetail('${esc(comment.postId)}')">
+                    <div style="font-size: 12px; cursor: pointer; color: var(--primary-color);" onclick="adminManager.viewPostDetail('${this.escapeJsAttr(comment.postId)}')">
                         <i class="fas fa-external-link-alt"></i> 点击查看
                     </div>
                     <div style="font-size: 12px; color: #666;">
@@ -2412,7 +2412,7 @@ confirmDeletePost: async function() {
                 <td>${this.formatDate(comment.timestamp)}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="action-btn btn-danger" onclick="adminManager.showDeleteCommentModal('${comment.id}', '${comment.postId}')">
+                        <button class="action-btn btn-danger" onclick="adminManager.showDeleteCommentModal('${this.escapeJsAttr(comment.id)}', '${this.escapeJsAttr(comment.postId)}')">
                             <i class="fas fa-trash"></i> 删除
                         </button>
                     </div>
@@ -2551,11 +2551,11 @@ confirmDeletePost: async function() {
                 <div class="post-detail-sidebar">
                     <div class="post-info-section">
                         <h4><i class="fas fa-user"></i> 作者信息</h4>
-                        <p><strong>用户名：</strong>${post.anonymous ? '匿名用户' : (post.username || '未知用户')}</p>
+                        <p><strong>用户名：</strong>${post.anonymous ? '匿名用户' : this.escapeHtml(post.username || '未知用户')}</p>
                         ${!post.anonymous ? `
-                        <p><strong>学校：</strong>${post.school || '未设置'}</p>
-                        <p><strong>年级：</strong>${post.grade || '未设置'}</p>
-                        <p><strong>班级：</strong>${post.className || '未设置'}</p>
+                        <p><strong>学校：</strong>${this.escapeHtml(post.school || '未设置')}</p>
+                        <p><strong>年级：</strong>${this.escapeHtml(post.grade || '未设置')}</p>
+                        <p><strong>班级：</strong>${this.escapeHtml(post.className || '未设置')}</p>
                         ` : ''}
                         <p><strong>发布时间：</strong>${this.formatDate(post.timestamp)}</p>
                     </div>
@@ -2854,14 +2854,14 @@ confirmDeletePost: async function() {
                             </div>
                         </div>
                         <div class="report-actions">
-                            <button class="action-btn-sm view" onclick="adminManager.viewReportDetail('${report.id}')">
+                            <button class="action-btn-sm view" onclick="adminManager.viewReportDetail('${this.escapeJsAttr(report.id)}')">
                                 <i class="fas fa-eye"></i> 详情
                             </button>
                             ${report.status === 'pending' ? `
-                                <button class="action-btn-sm approve" onclick="adminManager.showProcessModal('${report.id}', 'approve')">
+                                <button class="action-btn-sm approve" onclick="adminManager.showProcessModal('${this.escapeJsAttr(report.id)}', 'approve')">
                                     <i class="fas fa-check"></i> 处理
                                 </button>
-                                <button class="action-btn-sm reject" onclick="adminManager.showProcessModal('${report.id}', 'reject')">
+                                <button class="action-btn-sm reject" onclick="adminManager.showProcessModal('${this.escapeJsAttr(report.id)}', 'reject')">
                                     <i class="fas fa-times"></i> 驳回
                                 </button>
                             ` : `
@@ -3138,10 +3138,10 @@ confirmDeletePost: async function() {
             
             ${report.status === 'pending' ? `
             <div class="detail-actions">
-                <button class="action-btn btn-success" onclick="adminManager.closeModal('reportDetailModal'); adminManager.showProcessModal('${report.id}', 'approve')">
+                <button class="action-btn btn-success" onclick="adminManager.closeModal('reportDetailModal'); adminManager.showProcessModal('${this.escapeJsAttr(report.id)}', 'approve')">
                     <i class="fas fa-check"></i> 通过举报
                 </button>
-                <button class="action-btn btn-warning" onclick="adminManager.closeModal('reportDetailModal'); adminManager.showProcessModal('${report.id}', 'reject')">
+                <button class="action-btn btn-warning" onclick="adminManager.closeModal('reportDetailModal'); adminManager.showProcessModal('${this.escapeJsAttr(report.id)}', 'reject')">
                     <i class="fas fa-times"></i> 驳回举报
                 </button>
             </div>
@@ -3609,26 +3609,26 @@ confirmDeletePost: async function() {
                         ${this.escapeHtml(announcement.content).substring(0, 150)}${announcement.content.length > 150 ? '...' : ''}
                     </div>
                     <div class="announcement-meta">
-                        <span><i class="fas fa-user"></i> ${announcement.createdBy?.username || '未知'}</span>
+                        <span><i class="fas fa-user"></i> ${this.escapeHtml(announcement.createdBy?.username || '未知')}</span>
                         <span><i class="fas fa-clock"></i> ${this.formatDate(announcement.createdAt)}</span>
                         <span><i class="fas fa-eye"></i> ${announcement.viewCount || 0} 次浏览</span>
                     </div>
                     <div class="announcement-actions">
-                        <button onclick="adminManager.toggleAnnouncementStatus('${announcement._id}', ${announcement.isActive})" 
+                        <button onclick="adminManager.toggleAnnouncementStatus('${this.escapeJsAttr(announcement._id)}', ${announcement.isActive})" 
                                 class="action-btn ${announcement.isActive ? 'btn-warning' : 'btn-success'}" 
                                 title="${announcement.isActive ? '禁用' : '启用'}">
                             <i class="fas fa-${announcement.isActive ? 'pause' : 'play'}"></i>
                         </button>
-                        <button onclick="adminManager.toggleAnnouncementPinned('${announcement._id}', ${announcement.isPinned})" 
+                        <button onclick="adminManager.toggleAnnouncementPinned('${this.escapeJsAttr(announcement._id)}', ${announcement.isPinned})" 
                                 class="action-btn ${announcement.isPinned ? 'btn-primary' : 'btn-default'}" 
                                 title="${announcement.isPinned ? '取消置顶' : '置顶'}">
                             <i class="fas fa-thumbtack"></i>
                         </button>
-                        <button onclick="adminManager.editAnnouncement('${announcement._id}')" 
+                        <button onclick="adminManager.editAnnouncement('${this.escapeJsAttr(announcement._id)}')" 
                                 class="action-btn btn-info" title="编辑">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button onclick="adminManager.showDeleteAnnouncementModal('${announcement._id}', '${this.escapeHtml(announcement.title)}')" 
+                        <button onclick="adminManager.showDeleteAnnouncementModal('${this.escapeJsAttr(announcement._id)}', '${this.escapeJsAttr(announcement.title)}')" 
                                 class="action-btn btn-danger" title="删除">
                             <i class="fas fa-trash-alt"></i>
                         </button>
@@ -3986,16 +3986,16 @@ confirmDeletePost: async function() {
                         <span><i class="fas fa-clock"></i> 创建于 ${this.formatDate(category.createdAt)}</span>
                     </div>
                     <div class="announcement-actions">
-                        <button onclick="adminManager.toggleCategoryStatus('${category.id}', ${category.isActive})" 
+                        <button onclick="adminManager.toggleCategoryStatus('${this.escapeJsAttr(category.id)}', ${category.isActive})" 
                                 class="action-btn ${category.isActive ? 'btn-warning' : 'btn-success'}" 
                                 title="${category.isActive ? '禁用' : '启用'}">
                             <i class="fas fa-${category.isActive ? 'pause' : 'play'}"></i>
                         </button>
-                        <button onclick="adminManager.editCategory('${category.id}')" 
+                        <button onclick="adminManager.editCategory('${this.escapeJsAttr(category.id)}')" 
                                 class="action-btn btn-info" title="编辑">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button onclick="adminManager.showDeleteCategoryModal('${category.id}', '${this.escapeHtml(category.name)}')" 
+                        <button onclick="adminManager.showDeleteCategoryModal('${this.escapeJsAttr(category.id)}', '${this.escapeJsAttr(category.name)}')" 
                                 class="action-btn btn-danger" title="删除">
                             <i class="fas fa-trash-alt"></i>
                         </button>
@@ -4286,11 +4286,11 @@ confirmDeletePost: async function() {
                     ` : ''}
                     ${app.status === 'pending' ? `
                     <div class="announcement-actions">
-                        <button onclick="adminManager.quickApproveApplication('${app.id}')" 
+                        <button onclick="adminManager.quickApproveApplication('${this.escapeJsAttr(app.id)}')" 
                                 class="action-btn btn-success" title="批准">
                             <i class="fas fa-check"></i> 批准
                         </button>
-                        <button onclick="adminManager.quickRejectApplication('${app.id}')" 
+                        <button onclick="adminManager.quickRejectApplication('${this.escapeJsAttr(app.id)}')" 
                                 class="action-btn btn-danger" title="拒绝">
                             <i class="fas fa-times"></i> 拒绝
                         </button>

@@ -204,8 +204,8 @@ const profileManager = {
     
     // 渲染用户名（如果是管理员，添加管理员标识）
     this.dom.profileUsername.innerHTML = user.isAdmin ?
-      `${user.username} <span style="color: #dc2626; margin-left: 8px; font-size: 14px;">管理员</span>` :
-      user.username;
+      `${utils.escapeHtml(user.username)} <span style="color: #dc2626; margin-left: 8px; font-size: 14px;">管理员</span>` :
+      utils.escapeHtml(user.username);
     
     // 渲染班级信息
     const gradeDisplay = user.grade === "已毕业" ? 
