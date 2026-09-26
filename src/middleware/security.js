@@ -73,30 +73,12 @@ function requestIdMiddleware(req, res, next) {
 }
 
 /**
- * 敏感信息过滤日志中间件
- * 在记录日志时自动隐藏敏感字段
+ * 敏感信息过滤（日志脱敏）
+ * 实现已统一到 utils/logger —— logger 在 formatLogMessage 里对**所有**日志统一脱敏，
+ * 不再依赖调用方自觉。这里保留同名导出，兼容既有引用，避免出现两份实现各脱一半。
  */
 function sanitizeLogData(data) {
-  if (!data || typeof data !== 'object') {
-    return data;
-  }
-
-  const sanitized = Array.isArray(data) ? [] : {};
-  
-  for (const key in data) {
-    if (Object.prototype.hasOwnProperty.call(data, key)) {
-      const lowerKey = key.toLowerCase();
-      if (SENSITIVE_FIELDS.some(field => lowerKey.includes(field.toLowerCase()))) {
-        sanitized[key] = '[REDACTED]';
-      } else if (typeof data[key] === 'object') {
-        sanitized[key] = sanitizeLogData(data[key]);
-      } else {
-        sanitized[key] = data[key];
-      }
-    }
-  }
-  
-  return sanitized;
+  return logger.sanitizeLogData(data);
 }
 
 /**

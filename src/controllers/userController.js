@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const {
   hashPassword,
   comparePassword,
@@ -29,6 +30,7 @@ const { parseUserAgent } = require('../utils/userAgent');
 const { userCache, notificationCache, captchaCache, qqCache } = require('../utils/redisUtils');
 const qqOAuth = require('../utils/qqOAuth');
 const logger = require('../utils/logger');
+const { sanitizeHtml } = require('../utils/sanitize');
 const User = require('../models/User');
 
 // 公共邮箱验证正则
@@ -38,8 +40,8 @@ const userController = {
   // 生成图形验证码
   async getCaptcha(req, res) {
     try {
-      // 生成随机 4 位数字
-      const code = String(Math.floor(1000 + Math.random() * 9000));
+      // 生成随机 4 位数字（用 CSPRNG：Math.random 不适合安全场景）
+      const code = String(crypto.randomInt(1000, 10000));
       const captchaId = uuidv4();
 
       // 存储到 Redis（5分钟过期，验证后立即失效）
@@ -483,6 +485,11 @@ const userController = {
         refreshToken
       }, '注册成功'));
     } catch (error) {
+      // 唯一索引冲突（并发注册同名/同QQ/同邮箱）：由数据库兜底，转成可读的 400
+      if (error.code === 11000) {
+        logger.logWarn('注册失败：唯一字段冲突', { keyValue: error.keyValue, qq: req.body?.qq });
+        return res.status(400).json(generateErrorResponse('用户名、QQ号或邮箱已被占用'));
+      }
       logger.logError('注册失败', { error: error.message, body: req.body });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
@@ -928,6 +935,11 @@ const userController = {
       
       res.json(generateSuccessResponse({ user: safeUser }, '资料更新成功'));
     } catch (error) {
+      // 唯一索引冲突（并发改名为同一用户名/邮箱）：数据库兜底，转成可读的 400
+      if (error.code === 11000) {
+        logger.logWarn('资料更新失败：唯一字段冲突', { keyValue: error.keyValue, userId });
+        return res.status(400).json(generateErrorResponse('用户名或邮箱已被占用'));
+      }
       logger.logError('更新用户资料失败', { error: error.message, userId });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
     }
@@ -1883,7 +1895,8 @@ const userController = {
               id: newId,
               userId: userId,
               title: p.title || '无标题',
-              content: p.content || '',
+              // 导入内容同样要过净化：导出文件是用户可控的，此前原样入库会把 script/事件属性带进帖子
+              content: sanitizeHtml(p.content || ''),
               categoryId: p.category || null,
               timestamp: p.timestamp || now,
               updatedAt: now,
@@ -2379,36 +2392,65 @@ function filterUserInfoByPrivacy(user, isSelf, isFollower, isAdminViewer) {
 }
 
 /**
+ * 7 段数码管字形（局部坐标 10×20）
+ * 用途：把验证码数字画成线段路径，而不是写成 <text> —— 否则响应体里就是明文答案，
+ * 任何能发起请求的脚本（或直接抓包的机器人）都能读懂，验证码形同虚设。
+ */
+const CAPTCHA_SEGMENTS = {
+  a: [[1, 0], [9, 0]],
+  b: [[9, 0], [9, 10]],
+  c: [[9, 10], [9, 20]],
+  d: [[1, 20], [9, 20]],
+  e: [[1, 10], [1, 20]],
+  f: [[1, 0], [1, 10]],
+  g: [[1, 10], [9, 10]]
+};
+const CAPTCHA_DIGIT_SEGMENTS = {
+  '0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abgcd', '4': 'fgbc',
+  '5': 'afgcd', '6': 'afgecd', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg'
+};
+
+/**
  * 生成验证码 SVG 图片
- * 随机 4 位数字，带干扰线和噪点
+ * 随机 4 位数字，逐位以线段路径绘制（响应体中不含明文字符），带干扰曲线和噪点
  */
 function generateCaptchaSvg(code) {
   const width = 150;
   const height = 52;
+  // 坐标统一保留 2 位小数：默认的 17 位浮点串不仅让响应体膨胀数倍，
+  // 还会让「响应体不得包含 4 位明文答案」这类断言随机误报（随机小数里巧合出现 4 连数字）
+  const r2 = (n) => Math.round(n * 100) / 100;
 
   // 为每个字符生成随机位置、旋转、倾斜和大小变化
   const chars = code.split('').map((char, i) => {
-    const x = 20 + i * 30;
-    const y = 32 + Math.random() * 12 - 6;
-    const rotate = Math.random() * 50 - 25;          // ±25度旋转（原 ±10）
-    const skewX = Math.random() * 20 - 10;            // 水平倾斜 ±10度
-    const charFontSize = 26 + Math.floor(Math.random() * 8); // 26-34 随机大小
+    const x = 22 + i * 30;
+    const y = r2(10 + Math.random() * 10 - 5);
+    const rotate = r2(Math.random() * 40 - 20);       // ±20度旋转
+    const skewX = r2(Math.random() * 16 - 8);         // 水平倾斜 ±8度
+    const scale = r2(1.1 + Math.random() * 0.35);     // 笔画大小随机
     const r = Math.floor(Math.random() * 80);
     const g = Math.floor(Math.random() * 80);
     const b = Math.floor(Math.random() * 80 + 40);
-    return `<text x="${x}" y="${y}" font-family="Arial, sans-serif" font-size="${charFontSize}" font-weight="bold" fill="rgb(${r},${g},${b})" transform="rotate(${rotate},${x},${y}) skewX(${skewX})">${char}</text>`;
+    const segments = CAPTCHA_DIGIT_SEGMENTS[char] || '';
+    const pathData = segments.split('').map(s => {
+      const [[x1, y1], [x2, y2]] = CAPTCHA_SEGMENTS[s];
+      return `M${x1},${y1} L${x2},${y2}`;
+    }).join(' ');
+    return `<g transform="translate(${x},${y}) rotate(${rotate}) skewX(${skewX}) scale(${scale})">` +
+      `<path d="${pathData}" stroke="rgb(${r},${g},${b})" stroke-width="2.6" ` +
+      `stroke-linecap="round" fill="none"/></g>`;
   }).join('');
 
   // 生成贝塞尔曲线干扰线（比直线更难被 OCR 过滤）
   const curves = Array.from({ length: 3 }, () => {
-    const x1 = Math.random() * width * 0.3;
-    const y1 = Math.random() * height;
-    const cx1 = Math.random() * width * 0.5 + width * 0.2;
-    const cy1 = Math.random() * height;
-    const cx2 = Math.random() * width * 0.5 + width * 0.4;
-    const cy2 = Math.random() * height;
-    const x2 = width - Math.random() * width * 0.3;
-    const y2 = Math.random() * height;
+    const x1 = r2(Math.random() * width * 0.3);
+    const y1 = r2(Math.random() * height);
+    const cx1 = r2(Math.random() * width * 0.5 + width * 0.2);
+    const cy1 = r2(Math.random() * height);
+    const cx2 = r2(Math.random() * width * 0.5 + width * 0.4);
+    const cy2 = r2(Math.random() * height);
+    const x2 = r2(width - Math.random() * width * 0.3);
+    const y2 = r2(Math.random() * height);
     const r = Math.floor(Math.random() * 150 + 100);
     const g = Math.floor(Math.random() * 150 + 100);
     const b = Math.floor(Math.random() * 150 + 100);
@@ -2417,10 +2459,10 @@ function generateCaptchaSvg(code) {
 
   // 生成直线干扰线
   const lines = Array.from({ length: 3 }, () => {
-    const x1 = Math.random() * width;
-    const y1 = Math.random() * height;
-    const x2 = Math.random() * width;
-    const y2 = Math.random() * height;
+    const x1 = r2(Math.random() * width);
+    const y1 = r2(Math.random() * height);
+    const x2 = r2(Math.random() * width);
+    const y2 = r2(Math.random() * height);
     const r = Math.floor(Math.random() * 150 + 100);
     const g = Math.floor(Math.random() * 150 + 100);
     const b = Math.floor(Math.random() * 150 + 100);
@@ -2429,26 +2471,26 @@ function generateCaptchaSvg(code) {
 
   // 生成圆形噪点
   const dots = Array.from({ length: 80 }, () => {
-    const x = Math.random() * width;
-    const y = Math.random() * height;
+    const x = r2(Math.random() * width);
+    const y = r2(Math.random() * height);
     const r = Math.floor(Math.random() * 200);
     const g = Math.floor(Math.random() * 200);
     const b = Math.floor(Math.random() * 200);
-    const radius = 0.5 + Math.random() * 1.5;
+    const radius = r2(0.5 + Math.random() * 1.5);
     return `<circle cx="${x}" cy="${y}" r="${radius}" fill="rgba(${r},${g},${b},0.6)"/>`;
   }).join('');
 
   // 生成不规则色块噪点（小矩形 + 小线段，覆盖在字符上方）
   const blocks = Array.from({ length: 30 }, () => {
-    const x = Math.random() * width;
-    const y = Math.random() * height;
-    const w = 2 + Math.random() * 6;
-    const h = 1 + Math.random() * 3;
-    const rotate = Math.random() * 180;
+    const x = r2(Math.random() * width);
+    const y = r2(Math.random() * height);
+    const w = r2(2 + Math.random() * 6);
+    const h = r2(1 + Math.random() * 3);
+    const rotate = r2(Math.random() * 180);
     const r = Math.floor(Math.random() * 200);
     const g = Math.floor(Math.random() * 200);
     const b = Math.floor(Math.random() * 200);
-    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(${r},${g},${b},0.35)" transform="rotate(${rotate},${x + w / 2},${y + h / 2})"/>`;
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(${r},${g},${b},0.35)" transform="rotate(${rotate},${r2(x + w / 2)},${r2(y + h / 2)})"/>`;
   }).join('');
 
   // 渲染顺序：背景 → 字符 → 干扰元素（字符被干扰覆盖，增加识别难度）

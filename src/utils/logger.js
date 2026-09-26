@@ -1,6 +1,40 @@
 const fs = require('fs');
 const path = require('path');
 const { DATA_DIR } = require('../config/constants');
+const { SENSITIVE_FIELDS, SENSITIVE_EXACT_KEYS } = require('../config/security');
+
+// 日志文件保留天数：超出后在启动时删除（本模块按天分文件，这里补上保留策略）
+const LOG_RETENTION_DAYS = 30;
+
+/**
+ * 脱敏：递归替换日志数据中的敏感字段
+ * 在 formatLogMessage 统一调用，保证任何调用方传入的 req.body / 验证码都不会落盘明文
+ * 注意：keys 用子串匹配（覆盖 currentPassword / verificationCode 这类变体），
+ *      但 'code' 这类短名只做精确匹配，避免把 statusCode / errorCode 也一并脱敏
+ * @param {*} data - 任意日志附加数据
+ * @returns {*} 脱敏后的数据
+ */
+function sanitizeLogData(data) {
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeLogData(item));
+  }
+
+  const sanitized = {};
+  for (const key of Object.keys(data)) {
+    const lowerKey = key.toLowerCase();
+    if (SENSITIVE_EXACT_KEYS.includes(lowerKey) ||
+        SENSITIVE_FIELDS.some(field => lowerKey.includes(field.toLowerCase()))) {
+      sanitized[key] = '[REDACTED]';
+    } else {
+      sanitized[key] = sanitizeLogData(data[key]);
+    }
+  }
+  return sanitized;
+}
 
 // 日志级别
 const LOG_LEVELS = {
@@ -40,7 +74,8 @@ function getLogFilePath(date = new Date()) {
  */
 function formatLogMessage(level, message, data = null) {
   const timestamp = new Date().toISOString();
-  const dataStr = data ? ` | Data: ${JSON.stringify(data)}` : '';
+  // 统一脱敏：调用方可能直接传 req.body（含密码/验证码），绝不允许明文落盘
+  const dataStr = data ? ` | Data: ${JSON.stringify(sanitizeLogData(data))}` : '';
   return `[${timestamp}] [${level}] ${message}${dataStr}`;
 }
 
@@ -239,7 +274,29 @@ function readLogs(date = null, lines = 0) {
       return [];
     }
 
-    const content = fs.readFileSync(logFilePath, 'utf8');
+    let content;
+    if (lines > 0) {
+      // 有界读取：只从文件尾部读取「够切出 lines 行」的字节数，避免把整份日志读进内存
+      // （单行上限约 1KB：请求日志截断 UA、内容长度有限，取 1KB/行足够）
+      const { size } = fs.statSync(logFilePath);
+      const maxBytes = Math.min(size, lines * 1024);
+      const fd = fs.openSync(logFilePath, 'r');
+      try {
+        const buffer = Buffer.alloc(maxBytes);
+        fs.readSync(fd, buffer, 0, maxBytes, size - maxBytes);
+        content = buffer.toString('utf8');
+        // 从中间截断时首行可能是半行，丢弃
+        if (maxBytes < size) {
+          const firstNewline = content.indexOf('\n');
+          if (firstNewline !== -1) content = content.slice(firstNewline + 1);
+        }
+      } finally {
+        fs.closeSync(fd);
+      }
+    } else {
+      content = fs.readFileSync(logFilePath, 'utf8');
+    }
+
     const allLines = content.split('\n').filter(line => line.trim() !== '');
     
     // 如果lines为0或大于等于总行数，返回全部
@@ -317,6 +374,36 @@ function clearAllLogs() {
   }
 }
 
+/**
+ * 清理过期日志文件（启动时调用）
+ * 本模块按天分文件，此前没有任何保留策略，日志会无限累积占用磁盘
+ * @param {number} retentionDays - 保留天数，默认 LOG_RETENTION_DAYS
+ * @returns {number} 清理的文件数
+ */
+function cleanupOldLogs(retentionDays = LOG_RETENTION_DAYS) {
+  try {
+    const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+    let removed = 0;
+    getAllLogFiles().forEach(file => {
+      if (new Date(file.date).getTime() < cutoff) {
+        try {
+          fs.unlinkSync(file.path);
+          removed++;
+        } catch (error) {
+          console.error(`清理过期日志失败: ${file.path}`, error);
+        }
+      }
+    });
+    if (removed > 0) {
+      logSystemEvent('过期日志已清理', { removed, retentionDays });
+    }
+    return removed;
+  } catch (error) {
+    console.error('清理过期日志失败:', error);
+    return 0;
+  }
+}
+
 module.exports = {
   logInfo,
   logWarn,
@@ -333,6 +420,9 @@ module.exports = {
   clearLogs,
   deleteLogs,
   clearAllLogs,
+  cleanupOldLogs,
+  sanitizeLogData,
   flushLogsSync,
+  LOG_RETENTION_DAYS,
   LOG_LEVELS
 };

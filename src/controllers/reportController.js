@@ -275,8 +275,9 @@ const reportController = {
 
       const banDays = action === 'approve' ? (banDuration || BAN_DURATION_MAP[report.reason]) : null;
 
-      // 更新举报状态
-      await updateReportStatus(reportId, {
+      // 原子认领：把 pending 改成目标状态这一步同时充当「独占锁」，
+      // 只有认领成功的请求才有权执行后续封禁，避免两个管理员同时处理造成重复封禁（原实现先读后写存在 TOCTOU）
+      const claimed = await updateReportStatus(reportId, 'pending', {
         status: action === 'approve' ? 'processed' : 'rejected',
         processedAt: new Date(),
         processedBy: adminId,
@@ -284,6 +285,10 @@ const reportController = {
         note: note || '',
         banDuration: banDays
       });
+
+      if (!claimed) {
+        return res.status(409).json(generateErrorResponse('该举报已被处理'));
+      }
 
       if (action === 'approve') {
         // 举报通过 - 封禁被举报用户

@@ -225,8 +225,15 @@ const SENSITIVE_FIELDS = [
   'apiKey',
   'secret',
   'emailCode',
-  'smtpPass'
+  'smtpPass',
+  // 验证码类：此前缺失，导致注册/改密失败日志里落盘明文验证码
+  'verificationcode',
+  'captchacode',
+  'deletioncode'
 ];
+
+// 短名且易误伤的键：只做「精确匹配」，避免用子串匹配把 statusCode / errorCode 一并脱敏
+const SENSITIVE_EXACT_KEYS = ['code'];
 
 module.exports = {
   JWT_CONFIG,
@@ -238,6 +245,7 @@ module.exports = {
   REQUEST_LIMITS,
   XSS_CONFIG,
   SENSITIVE_FIELDS,
+  SENSITIVE_EXACT_KEYS,
   // 动态获取登录安全配置（优先使用管理员面板配置）
   getDynamicLoginSecurity: function() {
     try {

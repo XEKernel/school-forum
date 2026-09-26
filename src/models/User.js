@@ -135,10 +135,11 @@ const UserSchema = new Schema({
     index: true,
     sparse: true
   },
+  // 用户名唯一：此前只有普通索引，注册接口的「先查重再写入」在并发下会漏，能造出同名账号用于冒充
   username: {
     type: String,
     required: true,
-    index: true
+    unique: true
   },
   password: {
     type: String,

@@ -12,7 +12,8 @@ const {
   Notification, 
   Report, 
   BannedUser, 
-  DeletedPost 
+  DeletedPost,
+  Favorite
 } = require('../models');
 
 // ==================== 用户相关操作 ====================
@@ -256,10 +257,11 @@ async function createReport(reportData) {
   return await report.save();
 }
 
-// 更新举报状态
-async function updateReportStatus(reportId, updateData) {
+// 更新举报状态（幂等：只有当前状态等于 fromStatus 时才更新，否则返回 null）
+// 过滤器带上 fromStatus，让「认领」这一步原子化，杜绝两个管理员同时处理同一条举报造成的重复封禁（TOCTOU）
+async function updateReportStatus(reportId, fromStatus, updateData) {
   return await Report.findOneAndUpdate(
-    { id: reportId },
+    { id: reportId, status: fromStatus },
     updateData,
     { returnDocument: 'after' }
   ).lean();
@@ -304,6 +306,24 @@ async function getDeletedPosts() {
 async function permanentDeletePost(postId) {
   await Post.deleteOne({ id: postId });
   await DeletedPost.deleteOne({ id: postId });
+}
+
+/**
+ * 清理帖子的关联数据（作者软删与管理员永久删共用）
+ * 只清「指向已不可见内容」的引用：收藏与通知（收藏列表、通知中心此前会残留死链）。
+ * 举报记录刻意**不删**：它包含被举报内容快照，是治理凭据，删掉等于抹掉追责线索。
+ * @param {string} postId - 帖子ID
+ * @returns {Promise<{favorites:number, notifications:number}>} 清理条数
+ */
+async function cleanupPostRelations(postId) {
+  const [favResult, notifResult] = await Promise.all([
+    Favorite.deleteMany({ postId }),
+    Notification.deleteMany({ postId })
+  ]);
+  return {
+    favorites: favResult.deletedCount || 0,
+    notifications: notifResult.deletedCount || 0
+  };
 }
 
 // ==================== 统计相关操作 ====================
@@ -358,6 +378,24 @@ function migrateUserData() {
 }
 
 // ==================== 数据迁移工具 ====================
+
+/**
+ * 确保 User 索引与 schema 一致（幂等，启动时执行）
+ * 必需的原因：username 由「普通索引」改为「唯一索引」时，同名索引 username_1 已存在且规格不同，
+ * MongoDB 会抛 IndexOptionsConflict 而**不会**自动改建 → unique 约束静默失效。
+ * 这里显式删掉旧的非唯一索引，再用 syncIndexes 按 schema 重建。
+ * @returns {Promise<Object>} { rebuilt: boolean }
+ */
+async function ensureUserIndexes() {
+  const indexes = await User.collection.indexes();
+  const usernameIndex = indexes.find(i => i.name === 'username_1');
+  const rebuilt = !!(usernameIndex && !usernameIndex.unique);
+  if (rebuilt) {
+    await User.collection.dropIndex('username_1');
+  }
+  await User.syncIndexes();
+  return { rebuilt };
+}
 
 /**
  * 管理员角色迁移（幂等，每次启动执行）
@@ -564,6 +602,7 @@ module.exports = {
   // 已删除帖子操作
   getDeletedPosts,
   permanentDeletePost,
+  cleanupPostRelations,
   
   // 统计操作
   getStats,
@@ -576,6 +615,7 @@ module.exports = {
   // 迁移工具
   migrateFromJSON,
   migrateAdminRoles,
+  ensureUserIndexes,
   
   // 导出模型（供直接使用）
   User,

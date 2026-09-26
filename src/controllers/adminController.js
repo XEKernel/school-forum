@@ -9,6 +9,7 @@ const {
   unbanUser: removeBanRecord,
   getDeletedPosts,
   permanentDeletePost,
+  cleanupPostRelations,
   deletePost,
   updatePost,
   createNotification
@@ -28,6 +29,18 @@ const User = require('../models/User');
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+// 管理员用户列表允许下发的字段白名单
+// 此前是 User.find({}).lean() 全量返回（只删了 password），email / qqOpenId / loginDevices /
+// settings / birthday 等个人信息也会一并下发，而后台列表并不使用这些字段
+const ADMIN_USER_FIELDS = [
+  'id', 'username', 'qq', 'avatar', 'school', 'grade', 'className', 'enrollmentYear',
+  'postCount', 'commentCount', 'isActive', 'role', 'createdAt', 'lastLogin',
+  'banReason', 'banStartTime', 'banEndTime', 'bannedBy'
+].join(' ');
+
+// 日志查询单次最多解析的行数（只取最新这些行，避免整份日志进内存）
+const MAX_LOG_LINES = 20000;
 
 const adminController = {
   // 管理员功能 - 获取帖子列表（包含已删除帖子）
@@ -95,6 +108,9 @@ const adminController = {
       // 清帖子缓存：postCache TTL 10 分钟，且读取时校验的是缓存快照里的 isDeleted，
       // 不清缓存则已删内容最多还能读到 10 分钟（作者软删路径每处都清了，管理员路径此前漏了）
       await postCache.delete(postId);
+
+      // 清理关联数据：收藏与通知（举报记录保留作为治理凭据）
+      await cleanupPostRelations(postId);
 
       // 记录管理员永久删除帖子日志
       logger.logSecurityEvent('管理员永久删除帖子', {
@@ -239,14 +255,8 @@ const adminController = {
   // 管理员功能 - 获取所有用户
   async getAllUsers(req, res) {
     try {
-      const users = await User.find({}).lean();
-      
-      const safeUsers = users.map(user => {
-        const { password, ...safeUser } = user;
-        return safeUser;
-      });
-      
-      res.json(generateSuccessResponse({ users: safeUsers }));
+      const users = await User.find({}).select(ADMIN_USER_FIELDS).lean();
+      res.json(generateSuccessResponse({ users }));
     } catch (error) {
       logger.logError('获取用户列表失败', { error: error.message });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
@@ -256,13 +266,7 @@ const adminController = {
   // 管理员功能 - 获取封禁用户列表
   async getBannedUsers(req, res) {
     try {
-      const users = await User.find({ isActive: false }).lean();
-      
-      const bannedUsers = users.map(user => {
-        const { password, ...safeUser } = user;
-        return safeUser;
-      });
-      
+      const bannedUsers = await User.find({ isActive: false }).select(ADMIN_USER_FIELDS).lean();
       res.json(generateSuccessResponse({ bannedUsers }));
     } catch (error) {
       logger.logError('获取封禁用户列表失败', { error: error.message });
@@ -350,7 +354,7 @@ const adminController = {
       const activityUserIds = Object.keys(activityMap);
       let userActivity = [];
       if (activityUserIds.length > 0) {
-        const actUsers = await User.find({ id: { $in: activityUserIds } }).lean();
+        const actUsers = await User.find({ id: { $in: activityUserIds } }).select('id username school grade').lean();
         const userMap = {};
         actUsers.forEach(u => { userMap[u.id] = u; });
         userActivity = activityUserIds.map(uid => {
@@ -412,14 +416,11 @@ const adminController = {
           .sort({ timestamp: -1 })
           .limit(20)
           .lean(),
-        User.find({}).sort({ createdAt: -1 }).limit(10).lean()
+        User.find({}).sort({ createdAt: -1 }).limit(10).select(ADMIN_USER_FIELDS).lean()
       ]);
 
       // 获取最近注册的用户
-      const recentUsers = rawRecentUsers.map(user => {
-        const { password, ...safeUser } = user;
-        return safeUser;
-      });
+      const recentUsers = rawRecentUsers;
       
       res.json(generateSuccessResponse({
         recentPosts,
@@ -547,7 +548,9 @@ const adminController = {
       logger.logInfo('管理员访问日志', { page, limit, level, search, date, ip: req.ip });
 
       const loggerUtil = require('../utils/logger');
-      const logLines = loggerUtil.readLogs(date || null, 0); // 读取全部日志
+      // 有界读取：只取最新 MAX_LOG_LINES 行（readLogs 走尾部字节读取，不会把整份日志读进内存）。
+      // 此前传 0 表示"读取全部"，日志文件变大后会直接把整个文件 + 解析结果堆在内存里。
+      const logLines = loggerUtil.readLogs(date || null, MAX_LOG_LINES);
 
       // 解析日志行
       let logs = logLines.map(line => {

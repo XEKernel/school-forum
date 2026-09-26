@@ -75,7 +75,7 @@ function checkAuthConfig() {
 const { connectDB, migrateFromJSON } = require('./src/models');
 
 // 导入工具函数
-const { initializeDirectories, migrateAdminRoles } = require('./src/utils/dataUtils');
+const { initializeDirectories, migrateAdminRoles, ensureUserIndexes } = require('./src/utils/dataUtils');
 const logger = require('./src/utils/logger');
 
 // 导入Redis工具
@@ -88,6 +88,9 @@ const routes = require('./src/routes');
 const { checkMaintenanceMode, checkSelfDestructMode, debugModeLogger } = require('./src/middleware/maintenanceMode');
 
 const app = express();
+
+// HTTP server 实例（优雅关闭时需要 close() 停止接收新连接并等待在途请求完成）
+let httpServer = null;
 
 // ==================== 安全中间件配置 ====================
 // 注意：顺序很重要，安全中间件应尽早添加
@@ -392,6 +395,9 @@ app.use('/libs/markdown-it', express.static(path.join(__dirname, 'node_modules/m
 logger.logSystemEvent('正在初始化目录...');
 initializeDirectories();
 
+// 清理过期日志（按天分文件的保留策略，此前日志无限累积）
+logger.cleanupOldLogs();
+
 // 初始化配置文件
 const { initConfig } = require('./src/utils/configUtils');
 initConfig();
@@ -424,6 +430,10 @@ async function startServer() {
       });
     }
 
+    // 索引与 schema 对齐（username 改为唯一索引需要先删掉旧的非唯一同名索引，否则约束不生效）
+    const indexMigration = await ensureUserIndexes();
+    logger.logSystemEvent('索引校验完成', indexMigration);
+
     // 初始化 Redis（带超时，失败时不影响服务启动）
     logger.logSystemEvent('正在连接 Redis...');
     try {
@@ -437,7 +447,7 @@ async function startServer() {
     }
 
     // 启动 Express 服务器
-    app.listen(PORT, () => {
+    httpServer = app.listen(PORT, () => {
       logger.logSuccess('服务器启动成功', {
         port: PORT,
         dataDir: DATA_DIR,
@@ -470,9 +480,32 @@ process.on('unhandledRejection', (reason, promise) => {
 const gracefulShutdown = async (signal) => {
   logger.logSystemEvent(`收到 ${signal} 信号，正在关闭服务器...`);
   console.log(`\n收到 ${signal} 信号，正在优雅关闭...`);
-  // 落盘积压的异步日志
+
+  // 1) 停止接收新连接并等待在途请求完成（超时 10s 兜底，避免被长连接拖住无法退出）
+  if (httpServer) {
+    await new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        logger.logWarn('优雅关闭超时（10s），强制结束在途请求');
+        resolve();
+      }, 10000);
+      httpServer.close(() => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+
+  // 2) 落盘积压的异步日志
   logger.flushLogsSync();
+  // 3) 断开 Redis 与 MongoDB（此前只关了 Redis，Mongo 连接由进程退出兜底）
   await closeRedis();
+  try {
+    const { disconnectDB } = require('./src/models');
+    await disconnectDB();
+  } catch (error) {
+    logger.logError('关闭 MongoDB 连接失败', { error: error.message });
+  }
+
   process.exit(0);
 };
 

@@ -8,7 +8,8 @@ const {
   getUsers,
   getUserById,
   updateUser,
-  Post
+  Post,
+  cleanupPostRelations
 } = require('../utils/dataUtils');
 const {
   validatePostContent,
@@ -31,6 +32,7 @@ const notificationController = require('./notificationController');
 const { postCache, postCounters, userCache, hotPostsCache } = require('../utils/redisUtils');
 const Favorite = require('../models/Favorite');
 const Blacklist = require('../models/Blacklist');
+const User = require('../models/User');
 
 /**
  * 评论/回复嵌套深度上限（评论为第1层，回复最多到第6层）
@@ -48,6 +50,23 @@ const MAX_REPLY_DEPTH = 6;
 async function clampPostCounters(postId) {
   await Post.updateOne({ id: postId, likes: { $lt: 0 } }, { $set: { likes: 0 } });
   await Post.updateOne({ id: postId, dislikes: { $lt: 0 } }, { $set: { dislikes: 0 } });
+}
+
+/**
+ * 原子调整用户评论数（评论与回复共用同一个计数器）
+ * 原实现是「读出当前值 → 加 1 → 整体覆盖写」，并发评论会丢更新；
+ * 而删除评论/回复的路径此前完全没有扣减，只涨不跌。
+ * 扣减时附一次条件归零，兜住历史漂移造成的负数。
+ * @param {string} userId - 被调整的用户（评论/回复的作者，而非操作者）
+ * @param {number} delta - +1 或 -1
+ */
+async function adjustUserCommentCount(userId, delta) {
+  if (!userId) return;
+  await updateUser(userId, { $inc: { commentCount: delta } });
+  if (delta < 0) {
+    await User.updateOne({ id: userId, commentCount: { $lt: 0 } }, { $set: { commentCount: 0 } });
+  }
+  await userCache.delete(userId);
 }
 
 /**
@@ -841,10 +860,8 @@ const postController = {
       // 清除帖子缓存
       await postCache.delete(postId);
 
-      // 更新用户评论数（$inc 原子自增；原实现「读 + 1 再整体覆盖写」同样会丢更新）
-      await updateUser(userId, { $inc: { commentCount: 1 } });
-      // 清除用户缓存
-      await userCache.delete(userId);
+      // 更新用户评论数（原子自增，见 adjustUserCommentCount）
+      await adjustUserCommentCount(userId, 1);
 
       // 记录添加评论日志
       logger.logUserAction('添加评论', userId, username, {
@@ -924,7 +941,10 @@ const postController = {
         
         // 清除帖子缓存
         await postCache.delete(postId);
-        
+
+        // 递减被删回复作者的评论数（回复在 addReply 里会 +1，此前删除侧从不扣减）
+        await adjustUserCommentCount(nestedReply.userId, -1);
+
         return res.json(generateSuccessResponse({}, '嵌套回复删除成功'));
       }
       
@@ -951,7 +971,10 @@ const postController = {
         
         // 清除帖子缓存
         await postCache.delete(postId);
-        
+
+        // 递减被删回复作者的评论数
+        await adjustUserCommentCount(reply.userId, -1);
+
         return res.json(generateSuccessResponse({}, '回复删除成功'));
       }
       
@@ -966,7 +989,10 @@ const postController = {
       
       // 清除帖子缓存
       await postCache.delete(postId);
-      
+
+      // 递减被删评论作者的评论数（此前只增不减，commentCount 会持续虚高）
+      await adjustUserCommentCount(comment.userId, -1);
+
       res.json(generateSuccessResponse({}, '评论删除成功'));
     } catch (error) {
       logger.logError('删除评论失败', { error: error.message, postId: req.params.id, commentId: req.params.commentId });
@@ -1007,6 +1033,9 @@ const postController = {
       await postCounters.clearPostCounters(postId);
       await hotPostsCache.clear();
 
+      // 清理关联数据：收藏与通知指向已不可见的帖子（举报记录保留作为治理凭据，见 cleanupPostRelations）
+      const relationCleanup = await cleanupPostRelations(postId);
+
       // 更新栏目帖子数
       if (post.categoryId) {
         const Category = require('../models/Category');
@@ -1029,7 +1058,9 @@ const postController = {
       logger.logUserAction('删除帖子', userId, post.username, {
         postId,
         postAuthor: post.username,
-        deleteReason: '用户自行删除'
+        deleteReason: '用户自行删除',
+        favoritesCleared: relationCleanup.favorites,
+        notificationsCleared: relationCleanup.notifications
       });
       
       res.json(generateSuccessResponse({}, '帖子删除成功'));
@@ -1274,11 +1305,8 @@ const postController = {
       
       await updatePost(postId, { comments });
       
-      // 更新用户评论数
-      const user = await getUserById(userId);
-      if (user) {
-        await updateUser(userId, { commentCount: (user.commentCount || 0) + 1 });
-      }
+      // 更新用户评论数（原子自增，见 adjustUserCommentCount）
+      await adjustUserCommentCount(userId, 1);
 
       // 记录回复评论日志
       logger.logUserAction('回复评论', userId, username, {
