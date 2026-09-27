@@ -104,13 +104,12 @@ const HELMET_CONFIG = {
 contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      // script-src 不再放行 'unsafe-inline'：页面里已无内联 <script>（都抽到了 js/*.js），
-      // 注入 <script>alert(1)</script> 这类载荷会被浏览器直接拒绝执行。
-      // 'unsafe-hashes' 随之不需要（它只为内联事件处理器提供哈希白名单）。
-      // ⚠ 内联事件属性（onclick= 等，全站约 190 处）目前仍由 scriptSrcAttr 放行；
-      //   彻底移除需要把这些属性重构成 data-* + addEventListener，属独立改造项。
+      // script-src / script-src-attr 均不放行 'unsafe-inline'：
+      // ① 页面里已无内联 <script>（都抽到了 js/*.js）；
+      // ② 全站内联事件属性（onclick= 等 201 处）已重构为 data-* + 事件委托（utils.js 派发器），
+      //    注入 <script>alert(1)</script> 或 <img onerror=...> 这类载荷都会被浏览器直接拒绝执行。
+      // 不写 scriptSrcAttr → 该指令回退到 script-src（'self'），等效于禁止内联事件处理器。
       scriptSrc: ["'self'", "https://cdnjs.cloudflare.com"],
-      scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       fontSrc: ["'self'", "data:", "https://cdnjs.cloudflare.com", "https://fonts.gstatic.com"],
