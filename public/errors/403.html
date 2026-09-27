@@ -84,13 +84,13 @@
       </div>
       
       <div class="error-actions">
-        <button onclick="checkLoginStatus()" class="error-button login-button">
+        <button data-action="checkLoginStatus" class="error-button login-button">
           <i class="fas fa-sign-in-alt"></i> 重新登录
         </button>
-        <button onclick="window.location.href='../index.html'" class="error-button">
+        <button data-action="utils.navigate" data-arg="../index.html" class="error-button">
           <i class="fas fa-home"></i> 返回首页
         </button>
-        <button onclick="window.history.back()" class="error-button secondary">
+        <button data-action="utils.goBack" class="error-button secondary">
           <i class="fas fa-arrow-left"></i> 返回上一页
         </button>
       </div>

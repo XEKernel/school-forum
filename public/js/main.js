@@ -137,7 +137,7 @@ const app = {
       <div class="announcement-popup-content type-${announcement.type}">
         <div class="announcement-popup-header">
           <h3><i class="fas fa-bullhorn"></i> ${this.escapeHtml(announcement.title)}</h3>
-          <button class="announcement-popup-close" onclick="this.closest('.announcement-popup-modal').remove()">
+          <button class="announcement-popup-close" data-action="utils.removeClosest" data-arg-from="this" data-arg2=".announcement-popup-modal">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -146,7 +146,7 @@ const app = {
         </div>
         <div class="announcement-popup-footer">
           <label class="dont-show-again">
-            <input type="checkbox" onchange="sessionStorage.setItem('${popupKey}', 'true')">
+            <input type="checkbox" data-on="change" data-action="utils.setSessionFlag" data-arg="${popupKey}">
             不再提示
           </label>
         </div>

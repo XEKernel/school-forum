@@ -2552,7 +2552,7 @@ const settingsManager = {
       <div class="deletion-modal-content">
         <div class="deletion-modal-header">
           <h3><i class="fas fa-exclamation-triangle"></i> 注销账户</h3>
-          <button class="close-modal" onclick="this.closest('.deletion-modal').remove()">
+          <button class="close-modal" data-action="utils.removeClosest" data-arg-from="this" data-arg2=".deletion-modal">
             <i class="fas fa-times"></i>
           </button>
         </div>

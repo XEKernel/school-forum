@@ -109,7 +109,7 @@
             </div>
           </div>
           <div class="blocked-actions">
-            <button class="unblock-btn" data-uid="${safeId}" data-uname="${safeName}" onclick="blacklistManager.unblockUser(this.dataset.uid, this.dataset.uname)">
+            <button class="unblock-btn" data-uid="${safeId}" data-uname="${safeName}" data-action="blacklistManager.unblockUser" data-arg-from="data-uid" data-arg2-from="data-uname">
               <i class="fas fa-unlock"></i> 解除拉黑
             </button>
           </div>

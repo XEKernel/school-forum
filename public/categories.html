@@ -91,7 +91,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h2><i class="fas fa-plus-circle"></i> 申请新栏目</h2>
-        <button class="modal-close" onclick="closeApplyCategoryModal()">&times;</button>
+        <button class="modal-close" data-action="closeApplyCategoryModal">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
@@ -104,8 +104,8 @@
         </div>
         <div id="apply-category-status" class="save-status" style="display: none;"></div>
         <div class="modal-footer">
-          <button type="button" class="modal-btn cancel" onclick="closeApplyCategoryModal()">取消</button>
-          <button type="button" id="apply-category-submit-btn" class="modal-btn confirm" onclick="submitApplyCategory()">
+          <button type="button" class="modal-btn cancel" data-action="closeApplyCategoryModal">取消</button>
+          <button type="button" id="apply-category-submit-btn" class="modal-btn confirm" data-action="submitApplyCategory">
             <i class="fas fa-paper-plane"></i> 提交申请
           </button>
         </div>

@@ -65,19 +65,19 @@
       
       <div class="search-box">
         <input type="text" id="searchInput" placeholder="搜索论坛内容...">
-        <button onclick="searchForum()">
+        <button data-action="searchForum">
           <i class="fas fa-search"></i>
         </button>
       </div>
       
       <div class="error-actions">
-        <button onclick="window.location.href='../index.html'" class="error-button">
+        <button data-action="utils.navigate" data-arg="../index.html" class="error-button">
           <i class="fas fa-home"></i> 返回首页
         </button>
-        <button onclick="window.history.back()" class="error-button secondary">
+        <button data-action="utils.goBack" class="error-button secondary">
           <i class="fas fa-arrow-left"></i> 返回上一页
         </button>
-        <button onclick="window.location.href='../admin.html'" class="error-button secondary">
+        <button data-action="utils.navigate" data-arg="../admin.html" class="error-button secondary">
           <i class="fas fa-cog"></i> 管理面板
         </button>
       </div>

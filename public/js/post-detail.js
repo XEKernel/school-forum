@@ -504,7 +504,7 @@ const postDetailManager = {
       const safeUrl = this.escapeHtml(image.url);
       imagesHTML += `
         <img src="${safeUrl}" alt="${this.escapeHtml(image.originalname)}" 
-             class="post-detail-image" data-url="${safeUrl}" onclick="postDetailManager.showImageModal(this.dataset.url)">
+             class="post-detail-image" data-url="${safeUrl}" data-action="postDetailManager.showImageModal" data-arg-from="data-url">
       `;
     });
     

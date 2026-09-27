@@ -86,13 +86,13 @@
       </div>
       
       <div class="error-actions">
-        <button onclick="retryConnection()" class="error-button retry-button">
+        <button data-action="retryConnection" class="error-button retry-button">
           <i class="fas fa-redo"></i> 重试连接
         </button>
-        <button onclick="window.location.href='../index.html'" class="error-button">
+        <button data-action="utils.navigate" data-arg="../index.html" class="error-button">
           <i class="fas fa-home"></i> 返回首页
         </button>
-        <button onclick="window.location.reload()" class="error-button secondary">
+        <button data-action="utils.reloadPage" class="error-button secondary">
           <i class="fas fa-sync-alt"></i> 刷新页面
         </button>
       </div>

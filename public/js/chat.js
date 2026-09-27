@@ -468,7 +468,7 @@ const chatManager = {
       let bubbleContent = '';
       if (msg.type === 'image' && msg.imageUrl) {
         // 图片消息
-        bubbleContent = `<img class="message-image" src="${this.escapeHtml(msg.imageUrl)}" alt="图片消息" loading="lazy" onclick="chatManager.showImageLightbox(this.src)">`;
+        bubbleContent = `<img class="message-image" src="${this.escapeHtml(msg.imageUrl)}" alt="图片消息" loading="lazy" data-action="chatManager.showImageLightbox" data-arg-from="src">`;
         // 图片消息附带文字
         if (msg.content) {
           bubbleContent += `<div class="message-image-text">${this.formatMessageContent(msg.content)}</div>`;

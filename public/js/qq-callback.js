@@ -76,7 +76,7 @@
               <i class="fas fa-check-circle"></i>
               <p>${result.same ? '该 QQ 已绑定当前账号' : 'QQ 绑定成功，可通过 QQ 快捷登录'}</p>
               <div class="qq-bound-user">
-                <img src="${escapeHtml(result.avatar || '')}" alt="" onerror="this.style.display='none'">
+                <img src="${escapeHtml(result.avatar || '')}" alt="" data-on="error" data-action="utils.hideSelf" data-arg-from="this">
                 <span>${escapeHtml(result.nickname || '')}</span>
               </div>
               <a href="settings.html" class="login-button" style="text-align:center;text-decoration:none;">返回设置页</a>

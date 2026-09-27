@@ -590,7 +590,7 @@ const profileManager = {
         <div class="empty-state">
           <i class="fas fa-exclamation-triangle"></i>
           <p>${message}</p>
-          <button onclick="window.location.href='index.html'" class="post-button" style="margin-top: 20px;">
+          <button data-action="utils.navigate" data-arg="index.html" class="post-button" style="margin-top: 20px;">
             返回首页
           </button>
         </div>

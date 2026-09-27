@@ -897,7 +897,7 @@ const postsManager = {
       // XSS 防护：URL 同时转义 HTML 属性 + 通过 data-url 传递（onclick 不再拼接用户数据）
       const safeUrl = this.escapeHtml(image.url);
       imagesHTML += `
-        <img src="${safeUrl}" alt="${this.escapeHtml(image.originalname)}" class="post-image" data-url="${safeUrl}" onclick="postsManager.showImageModal(this.dataset.url)">
+        <img src="${safeUrl}" alt="${this.escapeHtml(image.originalname)}" class="post-image" data-url="${safeUrl}" data-action="postsManager.showImageModal" data-arg-from="data-url">
       `;
     });
     

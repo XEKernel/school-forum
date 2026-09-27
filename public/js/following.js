@@ -94,7 +94,7 @@ const followingManager = {
         <div class="empty-state">
           <i class="fas fa-sign-in-alt"></i>
           <p>请先登录查看关注的用户动态</p>
-          <button class="post-button" onclick="window.location.href='login.html'">
+          <button class="post-button" data-action="utils.navigate" data-arg="login.html">
             <i class="fas fa-sign-in-alt"></i> 去登录
           </button>
         </div>
@@ -315,7 +315,7 @@ const followingManager = {
         <div class="empty-state">
           <i class="fas fa-user-plus"></i>
           <p>你还没有关注任何人</p>
-          <button class="post-button" onclick="window.location.href='index.html'">
+          <button class="post-button" data-action="utils.navigate" data-arg="index.html">
             <i class="fas fa-home"></i> 去首页发现
           </button>
         </div>
@@ -660,7 +660,7 @@ const followingManager = {
       // XSS 防护：URL 转义 HTML 属性 + 通过 data-url 传递（onclick 不再拼接用户数据）
       const safeUrl = this.escapeHtml(image.url);
       imagesHTML += `
-        <img src="${safeUrl}" alt="${this.escapeHtml(image.originalname)}" class="post-image" data-url="${safeUrl}" onclick="followingManager.showImageModal(this.dataset.url)">
+        <img src="${safeUrl}" alt="${this.escapeHtml(image.originalname)}" class="post-image" data-url="${safeUrl}" data-action="followingManager.showImageModal" data-arg-from="data-url">
       `;
     });
     

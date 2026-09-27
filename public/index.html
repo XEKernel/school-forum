@@ -113,7 +113,7 @@
     <div class="modal-content" style="max-width: 480px;">
       <div class="modal-header">
         <h3><i class="fas fa-folder-plus"></i> 申请新栏目</h3>
-        <button class="close-modal" onclick="closeApplyCategoryModal()">&times;</button>
+        <button class="close-modal" data-action="closeApplyCategoryModal">&times;</button>
       </div>
       <div class="modal-body">
         <p style="color: var(--text-light); font-size: 13px; margin-bottom: 16px;">
@@ -132,8 +132,8 @@
         <div id="apply-category-status" class="save-status" style="display: none; margin-top: 8px;"></div>
       </div>
       <div class="modal-actions">
-        <button class="btn-cancel" onclick="closeApplyCategoryModal()">取消</button>
-        <button class="btn-success" id="apply-category-submit-btn" onclick="submitApplyCategory()">
+        <button class="btn-cancel" data-action="closeApplyCategoryModal">取消</button>
+        <button class="btn-success" id="apply-category-submit-btn" data-action="submitApplyCategory">
           <i class="fas fa-paper-plane"></i> 提交申请
         </button>
       </div>
@@ -149,7 +149,7 @@
         <span id="announcement-banner-message"></span>
       </div>
     </div>
-    <button class="announcement-close" onclick="closeAnnouncementBanner()">
+    <button class="announcement-close" data-action="closeAnnouncementBanner">
       <i class="fas fa-times"></i>
     </button>
   </div>
@@ -252,7 +252,7 @@
         <div class="category-sidebar-card" id="sidebar-category-list">
           <div class="category-sidebar-header">
             <h2 class="section-title"><i class="fas fa-th-large"></i> 栏目列表</h2>
-            <button type="button" class="category-sidebar-apply-btn" onclick="openApplyCategoryModal()">
+            <button type="button" class="category-sidebar-apply-btn" data-action="openApplyCategoryModal">
               <i class="fas fa-plus"></i> 申请
             </button>
           </div>
