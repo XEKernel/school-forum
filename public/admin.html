@@ -28,69 +28,69 @@
 
         <nav class="sidebar-nav">
             <div class="nav-group">
-                <button data-section="dashboard" class="active" onclick="showSection('dashboard')">
+                <button data-section="dashboard" class="active" data-action="showSection" data-arg="dashboard">
                     <i class="fas fa-tachometer-alt"></i><span>仪表盘</span>
                 </button>
             </div>
             <div class="nav-group">
                 <div class="nav-group-title">内容</div>
-                <button data-section="categories" onclick="showSection('categories')">
+                <button data-section="categories" data-action="showSection" data-arg="categories">
                     <i class="fas fa-folder-open"></i><span>栏目</span>
                 </button>
-                <button data-section="announcements" onclick="showSection('announcements')">
+                <button data-section="announcements" data-action="showSection" data-arg="announcements">
                     <i class="fas fa-bullhorn"></i><span>公告/消息管理</span>
                 </button>
-                <button data-section="posts" onclick="showSection('posts')">
+                <button data-section="posts" data-action="showSection" data-arg="posts">
                     <i class="fas fa-file-alt"></i><span>帖子</span>
                 </button>
-                <button data-section="comments" onclick="showSection('comments')">
+                <button data-section="comments" data-action="showSection" data-arg="comments">
                     <i class="fas fa-comments"></i><span>评论</span>
                 </button>
             </div>
             <div class="nav-group">
                 <div class="nav-group-title">用户</div>
-                <button data-section="users" onclick="showSection('users')">
+                <button data-section="users" data-action="showSection" data-arg="users">
                     <i class="fas fa-users"></i><span>用户</span>
                 </button>
-                <button data-section="banned-users" onclick="showSection('banned-users')">
+                <button data-section="banned-users" data-action="showSection" data-arg="banned-users">
                     <i class="fas fa-ban"></i><span>封禁</span>
                 </button>
-                <button data-section="reports" onclick="showSection('reports')">
+                <button data-section="reports" data-action="showSection" data-arg="reports">
                     <i class="fas fa-flag"></i><span>举报</span>
                 </button>
             </div>
             <div class="nav-group">
                 <div class="nav-group-title">系统</div>
-                <button data-section="logs" onclick="showSection('logs')">
+                <button data-section="logs" data-action="showSection" data-arg="logs">
                     <i class="fas fa-file-alt"></i><span>日志</span>
                 </button>
-                <button data-section="stats" onclick="showSection('stats')">
+                <button data-section="stats" data-action="showSection" data-arg="stats">
                     <i class="fas fa-chart-bar"></i><span>统计</span>
                 </button>
-                <button data-section="ip-stats" onclick="showSection('ip-stats')">
+                <button data-section="ip-stats" data-action="showSection" data-arg="ip-stats">
                     <i class="fas fa-network-wired"></i><span>IP统计</span>
                 </button>
-                <button data-section="settings" onclick="showSection('settings')">
+                <button data-section="settings" data-action="showSection" data-arg="settings">
                     <i class="fas fa-cog"></i><span>配置</span>
                 </button>
             </div>
         </nav>
 
         <div class="sidebar-footer">
-            <button onclick="logout()" class="sidebar-logout">
+            <button data-action="logout" class="sidebar-logout">
                 <i class="fas fa-sign-out-alt"></i><span>退出管理</span>
             </button>
         </div>
     </aside>
 
     <!-- 侧边栏遮罩（移动端） -->
-    <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
+    <div class="sidebar-overlay" id="sidebar-overlay" data-action="toggleSidebar"></div>
 
     <!-- 主内容区 -->
     <main class="admin-main">
         <!-- 移动端顶栏 -->
         <div class="admin-topbar">
-            <button class="sidebar-toggle" onclick="toggleSidebar()">
+            <button class="sidebar-toggle" data-action="toggleSidebar">
                 <i class="fas fa-bars"></i>
             </button>
             <span class="topbar-title" id="topbar-title">仪表盘</span>
@@ -100,7 +100,7 @@
         <div id="dashboard" class="admin-section active">
             <div class="section-header">
                 <h2><i class="fas fa-tachometer-alt"></i> 系统概览</h2>
-                <button onclick="refreshDashboard()" class="action-btn btn-info">
+                <button data-action="refreshDashboard" class="action-btn btn-info">
                     <i class="fas fa-sync-alt"></i> 刷新
                 </button>
             </div>
@@ -124,10 +124,10 @@
             <div class="section-header">
                 <h2><i class="fas fa-folder-open"></i> 栏目管理</h2>
                 <div class="section-actions">
-                    <button onclick="adminManager.showAddCategoryModal()" class="action-btn btn-success">
+                    <button data-action="adminManager.showAddCategoryModal" class="action-btn btn-success">
                         <i class="fas fa-plus"></i> 添加栏目
                     </button>
-                    <button onclick="adminManager.loadCategories()" class="action-btn btn-info">
+                    <button data-action="adminManager.loadCategories" class="action-btn btn-info">
                         <i class="fas fa-sync-alt"></i> 刷新
                     </button>
                 </div>
@@ -158,7 +158,7 @@
             <div id="category-applications-alert" class="alert alert-warning" style="display: none; margin-bottom: 20px;">
                 <i class="fas fa-exclamation-circle"></i>
                 <span id="category-applications-count">0</span> 条栏目申请待处理
-                <button onclick="adminManager.showCategoryApplications()" class="action-btn btn-warning" style="margin-left: 15px; padding: 5px 15px;">查看申请</button>
+                <button data-action="adminManager.showCategoryApplications" class="action-btn btn-warning" style="margin-left: 15px; padding: 5px 15px;">查看申请</button>
             </div>
             <div class="categories-list-container" id="categories-list">
                 <div class="loading"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>
@@ -171,10 +171,10 @@
             <div class="section-header">
                 <h2><i class="fas fa-bullhorn"></i> 公告/消息管理</h2>
                 <div class="section-actions">
-                    <button onclick="adminManager.showAddAnnouncementModal()" class="action-btn btn-success">
+                    <button data-action="adminManager.showAddAnnouncementModal" class="action-btn btn-success">
                         <i class="fas fa-plus"></i> 发布公告
                     </button>
-                    <button onclick="adminManager.loadAnnouncements()" class="action-btn btn-info">
+                    <button data-action="adminManager.loadAnnouncements" class="action-btn btn-info">
                         <i class="fas fa-sync-alt"></i> 刷新
                     </button>
                 </div>
@@ -218,7 +218,7 @@
                     <input type="text" id="broadcast-title" placeholder="消息标题，如：周末活动通知" maxlength="100">
                     <textarea id="broadcast-content" placeholder="消息内容，如：本周六下午学校篮球场举行社团招新活动，欢迎大家参加！" maxlength="2000" rows="3"></textarea>
                     <div>
-                        <button onclick="adminManager.sendBroadcastMessage()" class="action-btn btn-success">
+                        <button data-action="adminManager.sendBroadcastMessage" class="action-btn btn-success">
                             <i class="fas fa-paper-plane"></i> 发送给全体用户
                         </button>
                     </div>
@@ -232,7 +232,7 @@
                 <h2><i class="fas fa-file-alt"></i> 帖子管理</h2>
                 <div class="search-box">
                     <input type="text" id="posts-search" placeholder="搜索帖子内容...">
-                    <button onclick="searchPosts()"><i class="fas fa-search"></i> 搜索</button>
+                    <button data-action="searchPosts"><i class="fas fa-search"></i> 搜索</button>
                 </div>
             </div>
             <div class="data-table-container">
@@ -260,7 +260,7 @@
                 <h2><i class="fas fa-comments"></i> 评论管理</h2>
                 <div class="search-box">
                     <input type="text" id="comments-search" placeholder="搜索评论内容...">
-                    <button onclick="searchComments()"><i class="fas fa-search"></i> 搜索</button>
+                    <button data-action="searchComments"><i class="fas fa-search"></i> 搜索</button>
                 </div>
             </div>
             <div class="data-table-container">
@@ -288,7 +288,7 @@
                 <h2><i class="fas fa-users"></i> 用户管理</h2>
                 <div class="search-box">
                     <input type="text" id="users-search" placeholder="搜索用户名...">
-                    <button onclick="searchUsers()"><i class="fas fa-search"></i> 搜索</button>
+                    <button data-action="searchUsers"><i class="fas fa-search"></i> 搜索</button>
                 </div>
             </div>
             <div class="data-table-container">
@@ -316,7 +316,7 @@
         <div id="banned-users" class="admin-section">
             <div class="section-header">
                 <h2><i class="fas fa-ban"></i> 封禁用户管理</h2>
-                <button onclick="loadBannedUsers()" class="action-btn btn-info">
+                <button data-action="loadBannedUsers" class="action-btn btn-info">
                     <i class="fas fa-sync-alt"></i> 刷新
                 </button>
             </div>
@@ -347,36 +347,36 @@
                 <div class="reports-header-actions">
                     <div class="reports-search-box">
                         <i class="fas fa-search"></i>
-                        <input type="text" id="reports-search" placeholder="搜索举报内容..." onkeyup="adminManager.handleReportsSearch(event)">
+                        <input type="text" id="reports-search" placeholder="搜索举报内容..." data-on="keyup" data-action="adminManager.handleReportsSearch" data-arg-from="event">
                     </div>
-                    <button onclick="adminManager.loadReports()" class="action-btn btn-info">
+                    <button data-action="adminManager.loadReports" class="action-btn btn-info">
                         <i class="fas fa-sync-alt"></i> 刷新
                     </button>
                 </div>
             </div>
             <div class="reports-stats-modern">
-                <div class="report-stat-card total" onclick="adminManager.filterReports('all')">
+                <div class="report-stat-card total" data-action="adminManager.filterReports" data-arg="all">
                     <div class="stat-bg-icon"><i class="fas fa-flag"></i></div>
                     <div class="stat-info">
                         <span class="stat-number" id="reports-total">0</span>
                         <span class="stat-label">总举报</span>
                     </div>
                 </div>
-                <div class="report-stat-card pending" onclick="adminManager.filterReports('pending')">
+                <div class="report-stat-card pending" data-action="adminManager.filterReports" data-arg="pending">
                     <div class="stat-bg-icon"><i class="fas fa-clock"></i></div>
                     <div class="stat-info">
                         <span class="stat-number" id="reports-pending">0</span>
                         <span class="stat-label">待处理</span>
                     </div>
                 </div>
-                <div class="report-stat-card processed" onclick="adminManager.filterReports('processed')">
+                <div class="report-stat-card processed" data-action="adminManager.filterReports" data-arg="processed">
                     <div class="stat-bg-icon"><i class="fas fa-check-circle"></i></div>
                     <div class="stat-info">
                         <span class="stat-number" id="reports-processed">0</span>
                         <span class="stat-label">已处理</span>
                     </div>
                 </div>
-                <div class="report-stat-card rejected" onclick="adminManager.filterReports('rejected')">
+                <div class="report-stat-card rejected" data-action="adminManager.filterReports" data-arg="rejected">
                     <div class="stat-bg-icon"><i class="fas fa-times-circle"></i></div>
                     <div class="stat-info">
                         <span class="stat-number" id="reports-rejected">0</span>
@@ -386,27 +386,27 @@
             </div>
             <div class="reports-filter-bar">
                 <div class="filter-tabs">
-                    <button class="filter-tab active" data-status="all" onclick="adminManager.filterReports('all')">
+                    <button class="filter-tab active" data-status="all" data-action="adminManager.filterReports" data-arg="all">
                         <i class="fas fa-list"></i> 全部
                     </button>
-                    <button class="filter-tab" data-status="pending" onclick="adminManager.filterReports('pending')">
+                    <button class="filter-tab" data-status="pending" data-action="adminManager.filterReports" data-arg="pending">
                         <i class="fas fa-hourglass-half"></i> 待处理
                         <span class="filter-badge" id="pending-badge">0</span>
                     </button>
-                    <button class="filter-tab" data-status="processed" onclick="adminManager.filterReports('processed')">
+                    <button class="filter-tab" data-status="processed" data-action="adminManager.filterReports" data-arg="processed">
                         <i class="fas fa-check"></i> 已处理
                     </button>
-                    <button class="filter-tab" data-status="rejected" onclick="adminManager.filterReports('rejected')">
+                    <button class="filter-tab" data-status="rejected" data-action="adminManager.filterReports" data-arg="rejected">
                         <i class="fas fa-times"></i> 已驳回
                     </button>
                 </div>
                 <div class="filter-actions">
-                    <select id="reports-type-filter" onchange="adminManager.filterReportsByType()">
+                    <select id="reports-type-filter" data-on="change" data-action="adminManager.filterReportsByType">
                         <option value="">所有类型</option>
                         <option value="post">帖子举报</option>
                         <option value="comment">评论举报</option>
                     </select>
-                    <select id="reports-reason-filter" onchange="adminManager.filterReportsByReason()">
+                    <select id="reports-reason-filter" data-on="change" data-action="adminManager.filterReportsByReason">
                         <option value="">所有原因</option>
                         <option value="SPAM">垃圾广告</option>
                         <option value="HARASSMENT">骚扰辱骂</option>
@@ -428,13 +428,13 @@
             <div class="section-header">
                 <h2><i class="fas fa-file-alt"></i> 系统日志</h2>
                 <div class="log-actions">
-                    <button onclick="adminManager.refreshLogs()" class="action-btn btn-info" title="刷新日志">
+                    <button data-action="adminManager.refreshLogs" class="action-btn btn-info" title="刷新日志">
                         <i class="fas fa-sync-alt"></i> 刷新
                     </button>
-                    <button onclick="adminManager.showClearLogsModal()" class="action-btn btn-warning" title="清空当前日期日志">
+                    <button data-action="adminManager.showClearLogsModal" class="action-btn btn-warning" title="清空当前日期日志">
                         <i class="fas fa-eraser"></i> 清空
                     </button>
-                    <button onclick="adminManager.showDeleteLogsModal()" class="action-btn btn-danger" title="删除当前日期日志文件">
+                    <button data-action="adminManager.showDeleteLogsModal" class="action-btn btn-danger" title="删除当前日期日志文件">
                         <i class="fas fa-trash-alt"></i> 删除
                     </button>
                 </div>
@@ -442,31 +442,31 @@
             <div class="log-filters-container">
                 <div class="log-date-selector">
                     <label><i class="fas fa-calendar-alt"></i> 选择日期：</label>
-                    <select id="log-date-select" onchange="adminManager.loadLogs()">
+                    <select id="log-date-select" data-on="change" data-action="adminManager.loadLogs">
                         <option value="">加载中...</option>
                     </select>
                     <span class="log-date-info" id="log-date-info"></span>
                 </div>
                 <div class="log-level-filters">
-                    <button class="log-level-btn active" data-level="ALL" onclick="adminManager.filterLogsByLevel('ALL')">
+                    <button class="log-level-btn active" data-level="ALL" data-action="adminManager.filterLogsByLevel" data-arg="ALL">
                         <i class="fas fa-list"></i> 全部
                     </button>
-                    <button class="log-level-btn log-info" data-level="INFO" onclick="adminManager.filterLogsByLevel('INFO')">
+                    <button class="log-level-btn log-info" data-level="INFO" data-action="adminManager.filterLogsByLevel" data-arg="INFO">
                         <i class="fas fa-info-circle"></i> 信息
                     </button>
-                    <button class="log-level-btn log-warn" data-level="WARN" onclick="adminManager.filterLogsByLevel('WARN')">
+                    <button class="log-level-btn log-warn" data-level="WARN" data-action="adminManager.filterLogsByLevel" data-arg="WARN">
                         <i class="fas fa-exclamation-triangle"></i> 警告
                     </button>
-                    <button class="log-level-btn log-error" data-level="ERROR" onclick="adminManager.filterLogsByLevel('ERROR')">
+                    <button class="log-level-btn log-error" data-level="ERROR" data-action="adminManager.filterLogsByLevel" data-arg="ERROR">
                         <i class="fas fa-times-circle"></i> 错误
                     </button>
-                    <button class="log-level-btn log-success" data-level="SUCCESS" onclick="adminManager.filterLogsByLevel('SUCCESS')">
+                    <button class="log-level-btn log-success" data-level="SUCCESS" data-action="adminManager.filterLogsByLevel" data-arg="SUCCESS">
                         <i class="fas fa-check-circle"></i> 成功
                     </button>
                 </div>
                 <div class="log-search-box">
-                    <input type="text" id="logs-search" placeholder="搜索日志内容..." onkeyup="adminManager.handleLogSearch(event)">
-                    <button onclick="adminManager.loadLogs()" class="search-btn"><i class="fas fa-search"></i></button>
+                    <input type="text" id="logs-search" placeholder="搜索日志内容..." data-on="keyup" data-action="adminManager.handleLogSearch" data-arg-from="event">
+                    <button data-action="adminManager.loadLogs" class="search-btn"><i class="fas fa-search"></i></button>
                 </div>
             </div>
             <div class="log-stats-container" id="log-stats">
@@ -503,7 +503,7 @@
         <div id="stats" class="admin-section">
             <div class="section-header">
                 <h2><i class="fas fa-chart-bar"></i> 详细统计</h2>
-                <button onclick="loadDetailedStats()" class="action-btn btn-info">
+                <button data-action="loadDetailedStats" class="action-btn btn-info">
                     <i class="fas fa-sync-alt"></i> 刷新
                 </button>
             </div>
@@ -529,10 +529,10 @@
             <div class="section-header">
                 <h2><i class="fas fa-network-wired"></i> IP访问统计</h2>
                 <div class="log-actions">
-                    <button onclick="adminManager.loadIpStats()" class="action-btn btn-info" title="刷新">
+                    <button data-action="adminManager.loadIpStats" class="action-btn btn-info" title="刷新">
                         <i class="fas fa-sync-alt"></i> 刷新
                     </button>
-                    <button onclick="adminManager.showClearAllIpStatsModal()" class="action-btn btn-danger" title="清除所有统计">
+                    <button data-action="adminManager.showClearAllIpStatsModal" class="action-btn btn-danger" title="清除所有统计">
                         <i class="fas fa-trash-alt"></i> 清除所有
                     </button>
                 </div>
@@ -569,7 +569,7 @@
         <div id="settings" class="admin-section">
             <div class="section-header">
                 <h2><i class="fas fa-cog"></i> 系统配置</h2>
-                <button onclick="adminManager.loadConfig()" class="action-btn btn-info">
+                <button data-action="adminManager.loadConfig" class="action-btn btn-info">
                     <i class="fas fa-sync-alt"></i> 刷新
                 </button>
             </div>
@@ -583,13 +583,13 @@
                                 <span id="current-mode-badge" class="mode-badge mode-normal">正常</span>
                             </div>
                             <div class="mode-actions">
-                                <button onclick="adminManager.setRunMode('normal')" class="mode-btn mode-btn-normal" id="btn-mode-normal">
+                                <button data-action="adminManager.setRunMode" data-arg="normal" class="mode-btn mode-btn-normal" id="btn-mode-normal">
                                     <i class="fas fa-check-circle"></i> 正常模式
                                 </button>
-                                <button onclick="adminManager.setRunMode('debug')" class="mode-btn mode-btn-debug" id="btn-mode-debug">
+                                <button data-action="adminManager.setRunMode" data-arg="debug" class="mode-btn mode-btn-debug" id="btn-mode-debug">
                                     <i class="fas fa-bug"></i> 调试模式
                                 </button>
-                                <button onclick="adminManager.showMaintenanceModal()" class="mode-btn mode-btn-maintenance" id="btn-mode-maintenance">
+                                <button data-action="adminManager.showMaintenanceModal" class="mode-btn mode-btn-maintenance" id="btn-mode-maintenance">
                                     <i class="fas fa-tools"></i> 维护模式
                                 </button>
                             </div>
@@ -630,7 +630,7 @@
                                     <span class="level-title">删除所有内容</span>
                                 </div>
                                 <p class="level-desc">删除所有帖子、评论、私信、通知、收藏、关注等数据</p>
-                                <button onclick="adminManager.showSelfDestructModal(3)" class="destruct-btn level-3-btn">
+                                <button data-action="adminManager.showSelfDestructModal" data-arg="3" class="destruct-btn level-3-btn">
                                     <i class="fas fa-trash-alt"></i> 执行三级自毁
                                 </button>
                             </div>
@@ -640,7 +640,7 @@
                                     <span class="level-title">清空数据库</span>
                                 </div>
                                 <p class="level-desc">清空整个数据库，删除所有集合和数据</p>
-                                <button onclick="adminManager.showSelfDestructModal(2)" class="destruct-btn level-2-btn">
+                                <button data-action="adminManager.showSelfDestructModal" data-arg="2" class="destruct-btn level-2-btn">
                                     <i class="fas fa-database"></i> 执行二级自毁
                                 </button>
                             </div>
@@ -650,7 +650,7 @@
                                     <span class="level-title">删除论坛文件</span>
                                 </div>
                                 <p class="level-desc">删除论坛相关文件和代码，包括前端和后端</p>
-                                <button onclick="adminManager.showSelfDestructModal(1)" class="destruct-btn level-1-btn">
+                                <button data-action="adminManager.showSelfDestructModal" data-arg="1" class="destruct-btn level-1-btn">
                                     <i class="fas fa-bomb"></i> 执行一级自毁
                                 </button>
                             </div>
@@ -663,7 +663,7 @@
                         <div class="admin-list" id="admin-list">
                             <div class="loading"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>
                         </div>
-                        <button onclick="adminManager.showAddAdminModal()" class="action-btn btn-success">
+                        <button data-action="adminManager.showAddAdminModal" class="action-btn btn-success">
                             <i class="fas fa-plus"></i> 添加管理员
                         </button>
                     </div>
@@ -674,7 +674,7 @@
                         <div class="schools-list" id="schools-list">
                             <div class="loading"><i class="fas fa-spinner fa-spin"></i> 加载中...</div>
                         </div>
-                        <button onclick="adminManager.showAddSchoolModal()" class="action-btn btn-success">
+                        <button data-action="adminManager.showAddSchoolModal" class="action-btn btn-success">
                             <i class="fas fa-plus"></i> 添加学校
                         </button>
                     </div>
@@ -981,7 +981,7 @@
                     </div>
                 </div>
                 <div class="config-actions">
-                    <button onclick="adminManager.saveConfig()" class="action-btn btn-success">
+                    <button data-action="adminManager.saveConfig" class="action-btn btn-success">
                         <i class="fas fa-save"></i> 保存配置
                     </button>
                 </div>
@@ -1023,7 +1023,7 @@
     <div class="modal-content report-detail-modal">
         <div class="modal-header">
             <h3><i class="fas fa-flag"></i> 举报详情</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('reportDetailModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="reportDetailModal">&times;</button>
         </div>
         <div class="report-detail-content" id="report-detail-content"></div>
     </div>
@@ -1034,7 +1034,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3><i class="fas fa-gavel"></i> 处理举报</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('processReportModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="processReportModal">&times;</button>
         </div>
         <div class="process-report-content" id="process-report-content">
             <div class="report-summary-card">
@@ -1073,8 +1073,8 @@
             </div>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('processReportModal')">取消</button>
-            <button class="btn-primary" id="confirm-process-btn" onclick="adminManager.confirmProcessReport()">
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="processReportModal">取消</button>
+            <button class="btn-primary" id="confirm-process-btn" data-action="adminManager.confirmProcessReport">
                 <i class="fas fa-check"></i> 确认处理
             </button>
         </div>
@@ -1087,7 +1087,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>封禁用户</h3>
-            <button class="close-modal" onclick="closeModal('banModal')">&times;</button>
+            <button class="close-modal" data-action="closeModal" data-arg="banModal">&times;</button>
         </div>
         <div class="form-group">
             <label>封禁时长</label>
@@ -1104,8 +1104,8 @@
             <textarea id="banReason" rows="3" placeholder="请输入封禁原因..."></textarea>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="closeModal('banModal')">取消</button>
-            <button class="btn-danger" onclick="confirmBan()">确认封禁</button>
+            <button class="btn-cancel" data-action="closeModal" data-arg="banModal">取消</button>
+            <button class="btn-danger" data-action="confirmBan">确认封禁</button>
         </div>
     </div>
 </div>
@@ -1115,15 +1115,15 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>删除帖子</h3>
-            <button class="close-modal" onclick="closeModal('deletePostModal')">&times;</button>
+            <button class="close-modal" data-action="closeModal" data-arg="deletePostModal">&times;</button>
         </div>
         <div class="form-group">
             <label>删除原因</label>
             <textarea id="deleteReason" rows="3" placeholder="请输入删除原因..."></textarea>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="closeModal('deletePostModal')">取消</button>
-            <button class="btn-danger" onclick="confirmDeletePost()">确认删除</button>
+            <button class="btn-cancel" data-action="closeModal" data-arg="deletePostModal">取消</button>
+            <button class="btn-danger" data-action="confirmDeletePost">确认删除</button>
         </div>
     </div>
 </div>
@@ -1133,15 +1133,15 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>删除评论</h3>
-            <button class="close-modal" onclick="closeModal('deleteCommentModal')">&times;</button>
+            <button class="close-modal" data-action="closeModal" data-arg="deleteCommentModal">&times;</button>
         </div>
         <div class="form-group">
             <label>删除原因</label>
             <textarea id="deleteCommentReason" rows="3" placeholder="请输入删除原因..."></textarea>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="closeModal('deleteCommentModal')">取消</button>
-            <button class="btn-danger" onclick="confirmDeleteComment()">确认删除</button>
+            <button class="btn-cancel" data-action="closeModal" data-arg="deleteCommentModal">取消</button>
+            <button class="btn-danger" data-action="confirmDeleteComment">确认删除</button>
         </div>
     </div>
 </div>
@@ -1151,7 +1151,7 @@
     <div class="modal-content modal-large">
         <div class="modal-header">
             <h3 id="schoolModalTitle">添加学校</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('schoolModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="schoolModal">&times;</button>
         </div>
         <div class="form-group">
             <label>学校ID</label>
@@ -1168,13 +1168,13 @@
                 <div class="add-class-info-row">
                     <input type="number" id="new-class-year" placeholder="入学年份" min="2020" max="2100" class="config-input small-input">
                     <input type="number" id="new-class-count" placeholder="班级数" min="1" max="100" class="config-input small-input">
-                    <button onclick="adminManager.addClassInfo()" class="action-btn btn-success"><i class="fas fa-plus"></i> 添加</button>
+                    <button data-action="adminManager.addClassInfo" class="action-btn btn-success"><i class="fas fa-plus"></i> 添加</button>
                 </div>
             </div>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('schoolModal')">取消</button>
-            <button class="btn-success" onclick="adminManager.saveSchool()">保存</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="schoolModal">取消</button>
+            <button class="btn-success" data-action="adminManager.saveSchool">保存</button>
         </div>
     </div>
 </div>
@@ -1184,7 +1184,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>删除学校</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('deleteSchoolModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="deleteSchoolModal">&times;</button>
         </div>
         <div class="form-group">
             <p>确定要删除学校 <strong id="deleteSchoolName"></strong> 吗？</p>
@@ -1192,8 +1192,8 @@
             <p style="color: var(--error-color); font-size: 14px;"><i class="fas fa-exclamation-triangle"></i> 注意：删除学校后，该学校的用户将无法继续使用论坛。</p>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('deleteSchoolModal')">取消</button>
-            <button class="btn-danger" onclick="adminManager.confirmDeleteSchool()">删除</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="deleteSchoolModal">取消</button>
+            <button class="btn-danger" data-action="adminManager.confirmDeleteSchool">删除</button>
         </div>
     </div>
 </div>
@@ -1203,15 +1203,15 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>添加管理员</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('addAdminModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="addAdminModal">&times;</button>
         </div>
         <div class="form-group">
             <label>用户ID或QQ号</label>
             <input type="text" id="newAdminId" placeholder="请输入用户ID或QQ号..." class="config-input">
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('addAdminModal')">取消</button>
-            <button class="btn-success" onclick="adminManager.confirmAddAdmin()">添加</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="addAdminModal">取消</button>
+            <button class="btn-success" data-action="adminManager.confirmAddAdmin">添加</button>
         </div>
     </div>
 </div>
@@ -1221,15 +1221,15 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>删除管理员</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('deleteAdminModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="deleteAdminModal">&times;</button>
         </div>
         <div class="form-group">
             <p>确定要删除管理员 <strong id="deleteAdminName"></strong> 吗？</p>
             <input type="hidden" id="deleteAdminId">
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('deleteAdminModal')">取消</button>
-            <button class="btn-danger" onclick="adminManager.confirmDeleteAdmin()">删除</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="deleteAdminModal">取消</button>
+            <button class="btn-danger" data-action="adminManager.confirmDeleteAdmin">删除</button>
         </div>
     </div>
 </div>
@@ -1239,11 +1239,11 @@
     <div class="modal-content modal-large">
         <div class="modal-header">
             <h3>帖子详情</h3>
-            <button class="close-modal" onclick="closeModal('viewPostModal')">&times;</button>
+            <button class="close-modal" data-action="closeModal" data-arg="viewPostModal">&times;</button>
         </div>
         <div id="post-detail-content" class="post-detail-view"></div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="closeModal('viewPostModal')">关闭</button>
+            <button class="btn-cancel" data-action="closeModal" data-arg="viewPostModal">关闭</button>
         </div>
     </div>
 </div>
@@ -1253,12 +1253,12 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>解封用户</h3>
-            <button class="close-modal" onclick="closeModal('unbanModal')">&times;</button>
+            <button class="close-modal" data-action="closeModal" data-arg="unbanModal">&times;</button>
         </div>
         <p>确定要解封用户 <strong id="unban-username"></strong> 吗？</p>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="closeModal('unbanModal')">取消</button>
-            <button class="btn-success" onclick="confirmUnban()">确认解封</button>
+            <button class="btn-cancel" data-action="closeModal" data-arg="unbanModal">取消</button>
+            <button class="btn-success" data-action="confirmUnban">确认解封</button>
         </div>
     </div>
 </div>
@@ -1268,13 +1268,13 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>清空日志</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('clearLogsModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="clearLogsModal">&times;</button>
         </div>
         <p>确定要清空 <strong id="clear-logs-date"></strong> 的所有日志吗？</p>
         <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> 此操作将清空该日期的所有日志内容，但保留日志文件。</p>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('clearLogsModal')">取消</button>
-            <button class="btn-warning" onclick="adminManager.confirmClearLogs()">确认清空</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="clearLogsModal">取消</button>
+            <button class="btn-warning" data-action="adminManager.confirmClearLogs">确认清空</button>
         </div>
     </div>
 </div>
@@ -1284,13 +1284,13 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>删除日志文件</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('deleteLogsModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="deleteLogsModal">&times;</button>
         </div>
         <p>确定要删除 <strong id="delete-logs-date"></strong> 的日志文件吗？</p>
         <p class="text-danger"><i class="fas fa-exclamation-circle"></i> 此操作将永久删除该日期的日志文件，无法恢复！</p>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('deleteLogsModal')">取消</button>
-            <button class="btn-danger" onclick="adminManager.confirmDeleteLogs()">确认删除</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="deleteLogsModal">取消</button>
+            <button class="btn-danger" data-action="adminManager.confirmDeleteLogs">确认删除</button>
         </div>
     </div>
 </div>
@@ -1300,7 +1300,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3><i class="fas fa-tools"></i> 启用维护模式</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('maintenanceModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="maintenanceModal">&times;</button>
         </div>
         <div class="form-group">
             <label>维护提示消息</label>
@@ -1308,8 +1308,8 @@
         </div>
         <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> 启用维护模式后，普通用户将无法访问论坛，仅管理员可以访问。</p>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('maintenanceModal')">取消</button>
-            <button class="btn-warning" onclick="adminManager.confirmMaintenanceMode()">确认启用</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="maintenanceModal">取消</button>
+            <button class="btn-warning" data-action="adminManager.confirmMaintenanceMode">确认启用</button>
         </div>
     </div>
 </div>
@@ -1319,7 +1319,7 @@
     <div class="modal-content modal-danger">
         <div class="modal-header danger-header">
             <h3><i class="fas fa-skull-crossbones"></i> 自毁模式确认</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('selfDestructModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="selfDestructModal">&times;</button>
         </div>
         <div class="self-destruct-confirm-content">
             <div class="danger-alert">
@@ -1334,8 +1334,8 @@
             </div>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('selfDestructModal')">取消</button>
-            <button class="btn-danger destruct-confirm-btn" onclick="adminManager.confirmSelfDestruct()">
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="selfDestructModal">取消</button>
+            <button class="btn-danger destruct-confirm-btn" data-action="adminManager.confirmSelfDestruct">
                 <i class="fas fa-skull-crossbones"></i> 确认执行
             </button>
         </div>
@@ -1347,7 +1347,7 @@
     <div class="modal-content announcement-modal">
         <div class="modal-header">
             <h3 id="announcementModalTitle"><i class="fas fa-bullhorn"></i> 发布公告</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('announcementModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="announcementModal">&times;</button>
         </div>
         <div class="announcement-form">
             <div class="form-group">
@@ -1404,8 +1404,8 @@
             </div>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('announcementModal')">取消</button>
-            <button class="btn-success" id="announcement-save-btn" onclick="adminManager.saveAnnouncement()">
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="announcementModal">取消</button>
+            <button class="btn-success" id="announcement-save-btn" data-action="adminManager.saveAnnouncement">
                 <i class="fas fa-save"></i> 保存
             </button>
         </div>
@@ -1418,13 +1418,13 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3><i class="fas fa-trash-alt"></i> 删除公告</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('deleteAnnouncementModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="deleteAnnouncementModal">&times;</button>
         </div>
         <p>确定要删除公告 "<strong id="delete-announcement-title"></strong>" 吗？</p>
         <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> 此操作无法撤销！</p>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('deleteAnnouncementModal')">取消</button>
-            <button class="btn-danger" onclick="adminManager.confirmDeleteAnnouncement()">确认删除</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="deleteAnnouncementModal">取消</button>
+            <button class="btn-danger" data-action="adminManager.confirmDeleteAnnouncement">确认删除</button>
         </div>
         <input type="hidden" id="delete-announcement-id">
     </div>
@@ -1435,7 +1435,7 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3 id="categoryModalTitle"><i class="fas fa-folder-plus"></i> 添加栏目</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('categoryModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="categoryModal">&times;</button>
         </div>
         <div class="form-group">
             <label><i class="fas fa-tag"></i> 栏目名称 <span class="required">*</span></label>
@@ -1480,8 +1480,8 @@
             </label>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('categoryModal')">取消</button>
-            <button class="btn-success" id="category-save-btn" onclick="adminManager.saveCategory()">
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="categoryModal">取消</button>
+            <button class="btn-success" id="category-save-btn" data-action="adminManager.saveCategory">
                 <i class="fas fa-save"></i> 保存
             </button>
         </div>
@@ -1494,13 +1494,13 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3><i class="fas fa-trash-alt"></i> 删除栏目</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('deleteCategoryModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="deleteCategoryModal">&times;</button>
         </div>
         <p>确定要删除栏目 "<strong id="delete-category-name"></strong>" 吗？</p>
         <p class="text-warning"><i class="fas fa-exclamation-triangle"></i> 删除后，该栏目下的帖子将变为无栏目状态，但不会删除帖子内容。</p>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('deleteCategoryModal')">取消</button>
-            <button class="btn-danger" id="confirm-delete-category-btn" onclick="adminManager.confirmDeleteCategory()">确认删除</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="deleteCategoryModal">取消</button>
+            <button class="btn-danger" id="confirm-delete-category-btn" data-action="adminManager.confirmDeleteCategory">确认删除</button>
         </div>
         <input type="hidden" id="delete-category-id">
     </div>
@@ -1511,7 +1511,7 @@
     <div class="modal-content" style="max-width: 550px; max-height: 90vh; overflow-y: auto;">
         <div class="modal-header">
             <h3><i class="fas fa-clipboard-check"></i> 栏目申请审核</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('categoryApplicationModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="categoryApplicationModal">&times;</button>
         </div>
         <div id="category-application-detail" style="padding: 0 5px;"></div>
         <div class="form-group">
@@ -1519,11 +1519,11 @@
             <textarea id="application-review-note" rows="3" placeholder="输入审核备注（可选）..."></textarea>
         </div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('categoryApplicationModal')">取消</button>
-            <button class="btn-danger" onclick="adminManager.rejectCategoryApplication()">
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="categoryApplicationModal">取消</button>
+            <button class="btn-danger" data-action="adminManager.rejectCategoryApplication">
                 <i class="fas fa-times"></i> 拒绝
             </button>
-            <button class="btn-success" id="approve-category-app-btn" onclick="adminManager.approveCategoryApplication()">
+            <button class="btn-success" id="approve-category-app-btn" data-action="adminManager.approveCategoryApplication">
                 <i class="fas fa-check"></i> 批准并创建栏目
             </button>
         </div>
@@ -1536,26 +1536,26 @@
     <div class="modal-content" style="max-width: 700px; max-height: 85vh; overflow-y: auto;">
         <div class="modal-header">
             <h3><i class="fas fa-clipboard-list"></i> 栏目申请列表</h3>
-            <button class="close-modal" onclick="adminManager.closeModal('categoryApplicationsListModal')">&times;</button>
+            <button class="close-modal" data-action="adminManager.closeModal" data-arg="categoryApplicationsListModal">&times;</button>
         </div>
         <div class="category-applications-filter">
-            <button class="filter-tab active" data-status="pending" onclick="adminManager.filterCategoryApplications('pending')">
+            <button class="filter-tab active" data-status="pending" data-action="adminManager.filterCategoryApplications" data-arg="pending">
                 <i class="fas fa-hourglass-half"></i> 待处理
                 <span class="filter-badge" id="app-pending-badge">0</span>
             </button>
-            <button class="filter-tab" data-status="approved" onclick="adminManager.filterCategoryApplications('approved')">
+            <button class="filter-tab" data-status="approved" data-action="adminManager.filterCategoryApplications" data-arg="approved">
                 <i class="fas fa-check"></i> 已批准
             </button>
-            <button class="filter-tab" data-status="rejected" onclick="adminManager.filterCategoryApplications('rejected')">
+            <button class="filter-tab" data-status="rejected" data-action="adminManager.filterCategoryApplications" data-arg="rejected">
                 <i class="fas fa-times"></i> 已拒绝
             </button>
-            <button class="filter-tab" data-status="all" onclick="adminManager.filterCategoryApplications('all')">
+            <button class="filter-tab" data-status="all" data-action="adminManager.filterCategoryApplications" data-arg="all">
                 <i class="fas fa-list"></i> 全部
             </button>
         </div>
         <div id="category-applications-list" class="category-applications-list"></div>
         <div class="modal-actions">
-            <button class="btn-cancel" onclick="adminManager.closeModal('categoryApplicationsListModal')">关闭</button>
+            <button class="btn-cancel" data-action="adminManager.closeModal" data-arg="categoryApplicationsListModal">关闭</button>
         </div>
     </div>
 </div>

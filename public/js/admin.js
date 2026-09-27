@@ -539,6 +539,7 @@ fetchWithTimeout: function(url, options = {}) {
 
 
 loadPosts: async function(page = 1) {
+  page = Number(page) || 1; // [data-action] 属性参数是字符串，统一归一为数字页码
   try {
     const container = document.getElementById('posts-list');
     if (!container) return;
@@ -616,10 +617,10 @@ renderPostsList: function(posts) {
       </td>
       <td>
         <div class="action-buttons">
-          <button class="action-btn btn-info" onclick="adminManager.viewPostDetail('${this.escapeJsAttr(post.id)}')">
+          <button class="action-btn btn-info" data-action="adminManager.viewPostDetail" data-arg="${this.escapeHtml(post.id)}">
             <i class="fas fa-eye"></i> 详情
           </button>
-          <button class="action-btn btn-danger" onclick="adminManager.showDeletePostModal('${this.escapeJsAttr(post.id)}')">
+          <button class="action-btn btn-danger" data-action="adminManager.showDeletePostModal" data-arg="${this.escapeHtml(post.id)}">
             <i class="fas fa-trash"></i> 删除
           </button>
         </div>
@@ -656,6 +657,7 @@ renderPostsList: function(posts) {
 
     // 加载用户列表
     loadUsers: async function(page = 1) {
+      page = Number(page) || 1; // [data-action] 属性参数是字符串，统一归一为数字页码
   try {
     const container = document.getElementById('users-list');
     if (!container) return;
@@ -733,10 +735,10 @@ renderPostsList: function(posts) {
                 <td>
                     <div class="action-buttons">
                         ${user.isActive === false ? 
-                            `<button class="action-btn btn-success" onclick="adminManager.showUnbanModal('${this.escapeJsAttr(user.id)}', '${this.escapeJsAttr(user.username)}')">
+                            `<button class="action-btn btn-success" data-action="adminManager.showUnbanModal" data-arg="${this.escapeHtml(user.id)}" data-arg2="${this.escapeHtml(user.username)}">
                                 <i class="fas fa-unlock"></i> 解封
                             </button>` :
-                            `<button class="action-btn btn-warning" onclick="adminManager.showBanModal('${this.escapeJsAttr(user.id)}', '${this.escapeJsAttr(user.username)}')">
+                            `<button class="action-btn btn-warning" data-action="adminManager.showBanModal" data-arg="${this.escapeHtml(user.id)}" data-arg2="${this.escapeHtml(user.username)}">
                                 <i class="fas fa-ban"></i> 封禁
                             </button>`
                         }
@@ -803,7 +805,7 @@ loadBannedUsers: async function() {
                 <td>${esc(user.bannedBy || '系统')}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="action-btn btn-success" onclick="adminManager.showUnbanModal('${this.escapeJsAttr(user.id)}', '${this.escapeJsAttr(user.username)}')">
+                        <button class="action-btn btn-success" data-action="adminManager.showUnbanModal" data-arg="${this.escapeHtml(user.id)}" data-arg2="${this.escapeHtml(user.username)}">
                             <i class="fas fa-unlock"></i> 解封
                         </button>
                     </div>
@@ -866,6 +868,7 @@ loadBannedUsers: async function() {
 
     // 加载日志
     loadLogs: async function(page = 1) {
+      page = Number(page) || 1; // [data-action] 属性参数是字符串，统一归一为数字页码
         try {
             const container = document.getElementById('logs-list');
             if (!container) return;
@@ -991,7 +994,7 @@ loadBannedUsers: async function() {
             
             return `
                 <div class="console-log-item ${levelClass}" id="log-item-${index}">
-                    <div class="console-log-line" onclick="adminManager.toggleLogExpand('log-item-${index}', ${hasData})">
+                    <div class="console-log-line" data-action="adminManager.toggleLogExpand" data-arg="log-item-${index}" data-arg2="${hasData}">
                         <span class="console-timestamp">${this.formatTimeOnly(log.timestamp)}</span>
                         <span class="console-level [${level}]">[${level}]</span>
                         <span class="console-message">${this.escapeHtml(log.message)}</span>
@@ -1035,6 +1038,7 @@ loadBannedUsers: async function() {
 
     // 切换日志展开状态
     toggleLogExpand: function(itemId, hasData) {
+      if (typeof hasData === 'string') hasData = hasData === 'true'; // [data-action] 属性参数是字符串
         if (!hasData) return;
         
         const item = document.getElementById(itemId);
@@ -1056,13 +1060,13 @@ loadBannedUsers: async function() {
         let html = '';
 
         if (pagination.hasPrev) {
-            html += `<button onclick="adminManager.loadLogs(${pagination.currentPage - 1})" class="page-btn"><i class="fas fa-chevron-left"></i></button>`;
+            html += `<button data-action="adminManager.loadLogs" data-arg="${pagination.currentPage - 1}" class="page-btn"><i class="fas fa-chevron-left"></i></button>`;
         }
 
         html += `<span class="page-info">第 ${pagination.currentPage} / ${pagination.totalPages} 页 (共 ${pagination.totalLogs} 条)</span>`;
 
         if (pagination.hasNext) {
-            html += `<button onclick="adminManager.loadLogs(${pagination.currentPage + 1})" class="page-btn"><i class="fas fa-chevron-right"></i></button>`;
+            html += `<button data-action="adminManager.loadLogs" data-arg="${pagination.currentPage + 1}" class="page-btn"><i class="fas fa-chevron-right"></i></button>`;
         }
 
         container.innerHTML = html;
@@ -1249,7 +1253,7 @@ loadBannedUsers: async function() {
                 <td><strong>${stat.count}</strong> 次</td>
                 <td>${stat.lastAccess ? this.formatDate(stat.lastAccess) : '-'}</td>
                 <td>
-                    <button class="action-btn btn-danger" onclick="adminManager.clearIpStat('${this.escapeJsAttr(stat.ip)}')" title="清除">
+                    <button class="action-btn btn-danger" data-action="adminManager.clearIpStat" data-arg="${this.escapeHtml(stat.ip)}" title="清除">
                         <i class="fas fa-trash"></i> 清除
                     </button>
                 </td>
@@ -1451,10 +1455,10 @@ loadBannedUsers: async function() {
                     <p>${this.escapeHtml(classInfoText)}</p>
                 </div>
                 <div class="school-actions">
-                    <button onclick="adminManager.editSchool('${this.escapeJsAttr(school.id)}')" class="action-btn btn-info" style="padding: 5px 10px;">
+                    <button data-action="adminManager.editSchool" data-arg="${this.escapeHtml(school.id)}" class="action-btn btn-info" style="padding: 5px 10px;">
                         <i class="fas fa-edit"></i> 编辑
                     </button>
-                    <button onclick="adminManager.deleteSchool('${this.escapeJsAttr(school.id)}', '${this.escapeJsAttr(school.name)}')" class="action-btn btn-danger" style="padding: 5px 10px;">
+                    <button data-action="adminManager.deleteSchool" data-arg="${this.escapeHtml(school.id)}" data-arg2="${this.escapeHtml(school.name)}" class="action-btn btn-danger" style="padding: 5px 10px;">
                         <i class="fas fa-trash"></i> 删除
                     </button>
                 </div>
@@ -1678,6 +1682,7 @@ loadBannedUsers: async function() {
 
     // 删除班级信息
     removeClassInfo: function(year) {
+      year = Number(year); // [data-action] 属性参数是字符串
         if (!this.state.currentClassInfo) return;
 
         this.state.currentClassInfo = this.state.currentClassInfo.filter(info => info.year !== year);
@@ -1701,7 +1706,7 @@ loadBannedUsers: async function() {
             <div class="class-info-item">
                 <span class="class-info-year">${info.year}年</span>
                 <span class="class-info-count">${info.classCount}班</span>
-                <button onclick="adminManager.removeClassInfo(${info.year})" class="action-btn btn-danger" style="padding: 3px 8px; font-size: 12px;">
+                <button data-action="adminManager.removeClassInfo" data-arg="${info.year}" class="action-btn btn-danger" style="padding: 3px 8px; font-size: 12px;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -1898,7 +1903,7 @@ loadBannedUsers: async function() {
                     </div>
                 </div>
                 <div class="admin-actions">
-                    <button onclick="adminManager.showDeleteAdminModal('${this.escapeJsAttr(admin.id)}', '${this.escapeJsAttr(admin.username)}')" 
+                    <button data-action="adminManager.showDeleteAdminModal" data-arg="${this.escapeHtml(admin.id)}" data-arg2="${this.escapeHtml(admin.username)}" 
                             class="action-btn btn-danger"
                             title="删除管理员">
                         <i class="fas fa-trash"></i> 删除
@@ -2132,7 +2137,7 @@ loadBannedUsers: async function() {
         
         // 上一页按钮
         if (currentPage > 1) {
-            html += `<button onclick="adminManager.load${type.charAt(0).toUpperCase() + type.slice(1)}(${currentPage - 1})">上一页</button>`;
+            html += `<button data-action="adminManager.load${type.charAt(0).toUpperCase() + type.slice(1)}" data-arg="${currentPage - 1}">上一页</button>`;
         }
         
         // 页码按钮
@@ -2140,13 +2145,13 @@ loadBannedUsers: async function() {
             if (i === currentPage) {
                 html += `<button class="active">${i}</button>`;
             } else {
-                html += `<button onclick="adminManager.load${type.charAt(0).toUpperCase() + type.slice(1)}(${i})">${i}</button>`;
+                html += `<button data-action="adminManager.load${type.charAt(0).toUpperCase() + type.slice(1)}" data-arg="${i}">${i}</button>`;
             }
         }
         
         // 下一页按钮
         if (currentPage < totalPages) {
-            html += `<button onclick="adminManager.load${type.charAt(0).toUpperCase() + type.slice(1)}(${currentPage + 1})">下一页</button>`;
+            html += `<button data-action="adminManager.load${type.charAt(0).toUpperCase() + type.slice(1)}" data-arg="${currentPage + 1}">下一页</button>`;
         }
         
         container.innerHTML = html;
@@ -2324,6 +2329,7 @@ confirmDeletePost: async function() {
 
     // 加载评论列表
     loadComments: async function(page = 1) {
+      page = Number(page) || 1; // [data-action] 属性参数是字符串，统一归一为数字页码
         try {
             const container = document.getElementById('comments-list');
             if (!container) return;
@@ -2391,7 +2397,7 @@ confirmDeletePost: async function() {
                     ` : ''}
                 </td>
                 <td>
-                    <div style="font-size: 12px; cursor: pointer; color: var(--primary-color);" onclick="adminManager.viewPostDetail('${this.escapeJsAttr(comment.postId)}')">
+                    <div style="font-size: 12px; cursor: pointer; color: var(--primary-color);" data-action="adminManager.viewPostDetail" data-arg="${this.escapeHtml(comment.postId)}">
                         <i class="fas fa-external-link-alt"></i> 点击查看
                     </div>
                     <div style="font-size: 12px; color: #666;">
@@ -2401,7 +2407,7 @@ confirmDeletePost: async function() {
                 <td>${this.formatDate(comment.timestamp)}</td>
                 <td>
                     <div class="action-buttons">
-                        <button class="action-btn btn-danger" onclick="adminManager.showDeleteCommentModal('${this.escapeJsAttr(comment.id)}', '${this.escapeJsAttr(comment.postId)}')">
+                        <button class="action-btn btn-danger" data-action="adminManager.showDeleteCommentModal" data-arg="${this.escapeHtml(comment.id)}" data-arg2="${this.escapeHtml(comment.postId)}">
                             <i class="fas fa-trash"></i> 删除
                         </button>
                     </div>
@@ -2846,14 +2852,14 @@ confirmDeletePost: async function() {
                             </div>
                         </div>
                         <div class="report-actions">
-                            <button class="action-btn-sm view" onclick="adminManager.viewReportDetail('${this.escapeJsAttr(report.id)}')">
+                            <button class="action-btn-sm view" data-action="adminManager.viewReportDetail" data-arg="${this.escapeHtml(report.id)}">
                                 <i class="fas fa-eye"></i> 详情
                             </button>
                             ${report.status === 'pending' ? `
-                                <button class="action-btn-sm approve" onclick="adminManager.showProcessModal('${this.escapeJsAttr(report.id)}', 'approve')">
+                                <button class="action-btn-sm approve" data-action="adminManager.showProcessModal" data-arg="${this.escapeHtml(report.id)}" data-arg2="approve">
                                     <i class="fas fa-check"></i> 处理
                                 </button>
-                                <button class="action-btn-sm reject" onclick="adminManager.showProcessModal('${this.escapeJsAttr(report.id)}', 'reject')">
+                                <button class="action-btn-sm reject" data-action="adminManager.showProcessModal" data-arg="${this.escapeHtml(report.id)}" data-arg2="reject">
                                     <i class="fas fa-times"></i> 驳回
                                 </button>
                             ` : `
@@ -2932,6 +2938,12 @@ confirmDeletePost: async function() {
     },
     
     // 显示处理模态��
+    // 从举报详情弹窗直接处理：替代原内联的「关闭详情弹窗 + 打开处理框」两条语句（data-action 单动作承载）
+    closeAndProcessReport: function(reportId, defaultAction) {
+        this.closeModal('reportDetailModal');
+        this.showProcessModal(reportId, defaultAction);
+    },
+
     showProcessModal: function(reportId, defaultAction) {
         const report = this.state.reportsData?.find(r => r.id === reportId);
         if (!report) {
@@ -3130,10 +3142,10 @@ confirmDeletePost: async function() {
             
             ${report.status === 'pending' ? `
             <div class="detail-actions">
-                <button class="action-btn btn-success" onclick="adminManager.closeModal('reportDetailModal'); adminManager.showProcessModal('${this.escapeJsAttr(report.id)}', 'approve')">
+                <button class="action-btn btn-success" data-action="adminManager.closeAndProcessReport" data-arg="${this.escapeHtml(report.id)}" data-arg2="approve">
                     <i class="fas fa-check"></i> 通过举报
                 </button>
-                <button class="action-btn btn-warning" onclick="adminManager.closeModal('reportDetailModal'); adminManager.showProcessModal('${this.escapeJsAttr(report.id)}', 'reject')">
+                <button class="action-btn btn-warning" data-action="adminManager.closeAndProcessReport" data-arg="${this.escapeHtml(report.id)}" data-arg2="reject">
                     <i class="fas fa-times"></i> 驳回举报
                 </button>
             </div>
@@ -3543,6 +3555,7 @@ confirmDeletePost: async function() {
 
     // 加载公告列表
     loadAnnouncements: async function(page = 1) {
+      page = Number(page) || 1; // [data-action] 属性参数是字符串，统一归一为数字页码
         try {
             this.announcementsState.page = page;
             const skip = (page - 1) * this.announcementsState.limit;
@@ -3615,21 +3628,21 @@ confirmDeletePost: async function() {
                         <span><i class="fas fa-eye"></i> ${announcement.viewCount || 0} 次浏览</span>
                     </div>
                     <div class="announcement-actions">
-                        <button onclick="adminManager.toggleAnnouncementStatus('${this.escapeJsAttr(announcement._id)}', ${announcement.isActive})" 
+                        <button data-action="adminManager.toggleAnnouncementStatus" data-arg="${this.escapeHtml(announcement._id)}" data-arg2="${announcement.isActive}" 
                                 class="action-btn ${announcement.isActive ? 'btn-warning' : 'btn-success'}" 
                                 title="${announcement.isActive ? '禁用' : '启用'}">
                             <i class="fas fa-${announcement.isActive ? 'pause' : 'play'}"></i>
                         </button>
-                        <button onclick="adminManager.toggleAnnouncementPinned('${this.escapeJsAttr(announcement._id)}', ${announcement.isPinned})" 
+                        <button data-action="adminManager.toggleAnnouncementPinned" data-arg="${this.escapeHtml(announcement._id)}" data-arg2="${announcement.isPinned}" 
                                 class="action-btn ${announcement.isPinned ? 'btn-primary' : 'btn-default'}" 
                                 title="${announcement.isPinned ? '取消置顶' : '置顶'}">
                             <i class="fas fa-thumbtack"></i>
                         </button>
-                        <button onclick="adminManager.editAnnouncement('${this.escapeJsAttr(announcement._id)}')" 
+                        <button data-action="adminManager.editAnnouncement" data-arg="${this.escapeHtml(announcement._id)}" 
                                 class="action-btn btn-info" title="编辑">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button onclick="adminManager.showDeleteAnnouncementModal('${this.escapeJsAttr(announcement._id)}', '${this.escapeJsAttr(announcement.title)}')" 
+                        <button data-action="adminManager.showDeleteAnnouncementModal" data-arg="${this.escapeHtml(announcement._id)}" data-arg2="${this.escapeHtml(announcement.title)}" 
                                 class="action-btn btn-danger" title="删除">
                             <i class="fas fa-trash-alt"></i>
                         </button>
@@ -3665,7 +3678,7 @@ confirmDeletePost: async function() {
         let html = '';
         
         // 上一页
-        html += `<button ${page <= 1 ? 'disabled' : ''} onclick="adminManager.loadAnnouncements(${page - 1})">
+        html += `<button ${page <= 1 ? 'disabled' : ''} data-action="adminManager.loadAnnouncements" data-arg="${page - 1}">
             <i class="fas fa-chevron-left"></i>
         </button>`;
         
@@ -3674,11 +3687,11 @@ confirmDeletePost: async function() {
         const endPage = Math.min(totalPages, page + 2);
         
         for (let i = startPage; i <= endPage; i++) {
-            html += `<button class="${i === page ? 'active' : ''}" onclick="adminManager.loadAnnouncements(${i})">${i}</button>`;
+            html += `<button class="${i === page ? 'active' : ''}" data-action="adminManager.loadAnnouncements" data-arg="${i}">${i}</button>`;
         }
         
         // 下一页
-        html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="adminManager.loadAnnouncements(${page + 1})">
+        html += `<button ${page >= totalPages ? 'disabled' : ''} data-action="adminManager.loadAnnouncements" data-arg="${page + 1}">
             <i class="fas fa-chevron-right"></i>
         </button>`;
         
@@ -3898,6 +3911,7 @@ confirmDeletePost: async function() {
     
     // 加载栏目列表
     loadCategories: async function(page = 1) {
+      page = Number(page) || 1; // [data-action] 属性参数是字符串，统一归一为数字页码
         try {
             this.categoriesState.page = page;
             const skip = (page - 1) * this.categoriesState.limit;
@@ -3987,16 +4001,16 @@ confirmDeletePost: async function() {
                         <span><i class="fas fa-clock"></i> 创建于 ${this.formatDate(category.createdAt)}</span>
                     </div>
                     <div class="announcement-actions">
-                        <button onclick="adminManager.toggleCategoryStatus('${this.escapeJsAttr(category.id)}', ${category.isActive})" 
+                        <button data-action="adminManager.toggleCategoryStatus" data-arg="${this.escapeHtml(category.id)}" data-arg2="${category.isActive}" 
                                 class="action-btn ${category.isActive ? 'btn-warning' : 'btn-success'}" 
                                 title="${category.isActive ? '禁用' : '启用'}">
                             <i class="fas fa-${category.isActive ? 'pause' : 'play'}"></i>
                         </button>
-                        <button onclick="adminManager.editCategory('${this.escapeJsAttr(category.id)}')" 
+                        <button data-action="adminManager.editCategory" data-arg="${this.escapeHtml(category.id)}" 
                                 class="action-btn btn-info" title="编辑">
                             <i class="fas fa-edit"></i>
                         </button>
-                        <button onclick="adminManager.showDeleteCategoryModal('${this.escapeJsAttr(category.id)}', '${this.escapeJsAttr(category.name)}')" 
+                        <button data-action="adminManager.showDeleteCategoryModal" data-arg="${this.escapeHtml(category.id)}" data-arg2="${this.escapeHtml(category.name)}" 
                                 class="action-btn btn-danger" title="删除">
                             <i class="fas fa-trash-alt"></i>
                         </button>
@@ -4031,7 +4045,7 @@ confirmDeletePost: async function() {
         let html = '';
         
         // 上一页
-        html += `<button ${page <= 1 ? 'disabled' : ''} onclick="adminManager.loadCategories(${page - 1})">
+        html += `<button ${page <= 1 ? 'disabled' : ''} data-action="adminManager.loadCategories" data-arg="${page - 1}">
             <i class="fas fa-chevron-left"></i>
         </button>`;
         
@@ -4040,11 +4054,11 @@ confirmDeletePost: async function() {
         const endPage = Math.min(totalPages, page + 2);
         
         for (let i = startPage; i <= endPage; i++) {
-            html += `<button class="${i === page ? 'active' : ''}" onclick="adminManager.loadCategories(${i})">${i}</button>`;
+            html += `<button class="${i === page ? 'active' : ''}" data-action="adminManager.loadCategories" data-arg="${i}">${i}</button>`;
         }
         
         // 下一页
-        html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="adminManager.loadCategories(${page + 1})">
+        html += `<button ${page >= totalPages ? 'disabled' : ''} data-action="adminManager.loadCategories" data-arg="${page + 1}">
             <i class="fas fa-chevron-right"></i>
         </button>`;
         
@@ -4287,11 +4301,11 @@ confirmDeletePost: async function() {
                     ` : ''}
                     ${app.status === 'pending' ? `
                     <div class="announcement-actions">
-                        <button onclick="adminManager.quickApproveApplication('${this.escapeJsAttr(app.id)}')" 
+                        <button data-action="adminManager.quickApproveApplication" data-arg="${this.escapeHtml(app.id)}" 
                                 class="action-btn btn-success" title="批准">
                             <i class="fas fa-check"></i> 批准
                         </button>
-                        <button onclick="adminManager.quickRejectApplication('${this.escapeJsAttr(app.id)}')" 
+                        <button data-action="adminManager.quickRejectApplication" data-arg="${this.escapeHtml(app.id)}" 
                                 class="action-btn btn-danger" title="拒绝">
                             <i class="fas fa-times"></i> 拒绝
                         </button>
