@@ -1728,3 +1728,6 @@ const postsManager = {
     return div.innerHTML;
   }
 };
+
+// 暴露到全局：[data-action] 事件委托派发器据此解析 postsManager.xxx 动作（CSP 内联事件重构）
+window.postsManager = postsManager;

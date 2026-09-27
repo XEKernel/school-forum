@@ -310,11 +310,107 @@ const utils = {
         }
       });
     }, 100);
+  },
+
+  // ============ CSP 改造：[data-action] 事件委托派发器 ============
+  // 背景：内联事件属性（onclick="…"）需要 CSP 的 script-src-attr 'unsafe-inline' 才执行；
+  // 为彻底移除该放行项，全站内联属性改写为 data-* 声明，由本派发器统一委托执行。
+  // 属性约定：
+  //   data-action="命名空间.方法名" —— 自 window 逐级解析（如 showSection、adminManager.closeModal、utils.navigate）
+  //   data-on="click|change|keyup|input|error" —— 触发事件类型，缺省 click；error 用于资源加载失败（不冒泡）
+  //   data-arg / data-arg2 —— 静态字符串参数（与原来 fn('a','b') 一一对应）
+  //   data-arg-from / data-arg2-from —— 从元素属性实时取值；token "this"=元素自身、"event"=事件对象
+  // 调用语义：以「方法所属对象」为 this（adminManager.closeModal → this=adminManager），
+  // 与原内联调用 fn('x') 的作用域一致。监听用捕获阶段：与原内联处理器（目标阶段）等效，
+  // 不会因页面里常见的冒泡期 stopPropagation 而静默失效。未匹配到动作时告警而不抛错。
+  resolveAction: function(path) {
+    const parts = String(path || '').split('.');
+    let owner = window;
+    for (let i = 0; i < parts.length - 1 && owner != null; i++) {
+      owner = owner[parts[i]];
+    }
+    const fn = owner == null ? undefined : owner[parts[parts.length - 1]];
+    return typeof fn === 'function' ? { fn: fn, owner: owner } : null;
+  },
+
+  readActionArgs: function(el, event) {
+    const pick = (fromAttr, valueAttr) => {
+      const from = el.getAttribute(fromAttr);
+      if (from !== null) {
+        if (from === 'this') return el;
+        if (from === 'event') return event;
+        return el.getAttribute(from);
+      }
+      return el.hasAttribute(valueAttr) ? el.getAttribute(valueAttr) : undefined;
+    };
+    return [pick('data-arg-from', 'data-arg'), pick('data-arg2-from', 'data-arg2')];
+  },
+
+  handleActionEvent: function(event) {
+    const target = event.target;
+    const el = target && target.closest ? target.closest('[data-action]') : null;
+    if (!el) return;
+    if ((el.getAttribute('data-on') || 'click') !== event.type) return;
+    const action = el.getAttribute('data-action');
+    const resolved = this.resolveAction(action);
+    if (!resolved) {
+      console.warn('[data-action] 未找到可调用的动作:', action, el);
+      return;
+    }
+    const args = this.readActionArgs(el, event);
+    if (args[0] === undefined) resolved.fn.call(resolved.owner);
+    else if (args[1] === undefined) resolved.fn.call(resolved.owner, args[0]);
+    else resolved.fn.call(resolved.owner, args[0], args[1]);
+  },
+
+  initActionDispatcher: function() {
+    if (this._actionDispatcherReady) return;
+    this._actionDispatcherReady = true;
+    const handler = (event) => this.handleActionEvent(event);
+    ['click', 'change', 'input', 'keyup'].forEach(type => document.addEventListener(type, handler, true));
+    // 资源加载失败（如 img onerror）不冒泡，同样用捕获阶段委托
+    document.addEventListener('error', handler, true);
+  },
+
+  // ---- 供 data-action 引用的通用小动作（替代原先只能写在内联属性里的表达式）----
+  navigate: function(url) {
+    if (url) window.location.href = url;
+  },
+
+  goBack: function() {
+    window.history.back();
+  },
+
+  reloadPage: function() {
+    window.location.reload();
+  },
+
+  removeClosest: function(el, selector) {
+    const node = el && el.closest ? el.closest(selector) : null;
+    if (node) node.remove();
+  },
+
+  hideSelf: function(el) {
+    if (el) el.style.display = 'none';
+  },
+
+  setSessionFlag: function(key) {
+    if (!key) return;
+    try {
+      sessionStorage.setItem(key, 'true');
+    } catch (e) { /* 隐私模式下不可写，忽略 */ }
   }
 };
 
 // 确保 utils 对象在全局作用域中可用
 window.utils = utils;
+
+// [data-action] 事件委托初始化：defer 脚本执行时 DOM 已解析，直接绑定；否则等 DOMContentLoaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => utils.initActionDispatcher());
+} else {
+  utils.initActionDispatcher();
+}
 
 // 注册 Service Worker (PWA)
 if ('serviceWorker' in navigator) {
