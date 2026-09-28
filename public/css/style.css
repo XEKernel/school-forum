@@ -452,13 +452,16 @@ header {
 
 .main-content {
   display: grid;
-  grid-template-columns: 1fr;
+  /* 关键：1fr 的轨道最小值默认是 auto(=min-content)，子项一旦有较宽的
+     flex/nowrap 内容就会把轨道撑得比容器还宽，表现为手机端"元素被挤出屏幕"。
+     显式写 minmax(0, 1fr) 让轨道可以收缩到 0。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
 @media (min-width: 900px) {
   .main-content {
-    grid-template-columns: 2fr 1fr;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   }
 }
 
@@ -1359,12 +1362,17 @@ textarea {
 
 .action-buttons {
   display: flex;
-  gap: 20px;
+  /* 移动端关键：这一行有 5 个按钮且原本不换行，flex 子项又默认 min-width:auto
+     不肯收缩 → 整行最小宽度把 .post 卡片、进而把 grid 轨道撑破，
+     真机上表现为"操作栏被挤出屏幕"。允许换行 + 放宽横向间距即可自适应。 */
+  flex-wrap: wrap;
+  gap: 8px 20px;
 }
 
 .action-btn {
   display: flex;
   align-items: center;
+  min-width: 0; /* 允许窄屏收缩，避免 min-content 撑破父容器 */
   gap: 6px;
   font-size: 14px;
   color: var(--text-light);
@@ -2174,6 +2182,9 @@ textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* 移动端：按钮 + 长提示文字挤在一行会把按钮压扁，允许换行 */
+  flex-wrap: wrap;
+  gap: 10px 15px;
 }
 
 .new-post-btn {
@@ -2189,6 +2200,11 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* 移动端关键：这个按钮是个 flex 容器且默认 min-width:auto，被压缩时会缩到
+     单字宽度，中文标签就变成"一个字一行"的竖排。禁止压缩 + 禁止折行，
+     实在放不下时由父级 flex-wrap 换行。 */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .new-post-btn:hover {
@@ -2203,6 +2219,9 @@ textarea {
   display: flex;
   align-items: center;
   gap: 6px;
+  /* 允许收缩，把空间让给按钮，避免按钮被压成竖排 */
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .new-post-hint i {
@@ -5355,4 +5374,48 @@ mjx-container svg {
 [data-theme="dark"] #register-btn:hover {
   background: #818cf8;
   color: #0f172a;
+}
+
+/* ==================== 移动端修复（2026-09-28） ====================
+   两类只在窄屏暴露的问题：
+
+   1) 横向溢出："元素被挤出屏幕"。
+      根因是 grid / flex 子项默认 min-width:auto（= min-content），
+      一旦内部有较宽内容（多个按钮排成一行、nowrap 文本等），子项就
+      拒绝收缩，把 grid 轨道和卡片一起撑得比视口还宽。
+      —— .main-content 的 1fr 已在上面改成 minmax(0,1fr)，
+         这里再对布局容器统一放开收缩，作为兜底。
+
+   2) 中文逐字折行：按钮等短标签被 flex 压到单字宽度时，
+      会变成"一个字一行"的竖排（如"发布新帖子"）。
+      word-break:keep-all 阻止 CJK 在词内断开，配合父级 flex-wrap 换行。 */
+
+@media (max-width: 768px) {
+  .container,
+  .main-content,
+  .main-content > *,
+  .posts-section,
+  .sidebar,
+  .post,
+  .post > *,
+  .post-footer,
+  .action-buttons,
+  .new-post-card,
+  .new-post-content,
+  .category-nav-bar { min-width: 0; }
+
+  button,
+  .btn,
+  .action-btn,
+  .category-nav-item,
+  .new-post-btn { word-break: keep-all; }
+}
+
+@media (max-width: 600px) {
+  /* 窄屏收紧留白，换取更多内容宽度 */
+  .posts-section { padding: 14px; }
+  .post { padding: 16px; }
+  .container { padding: 0 12px; }
+  /* 触屏操作区稍微放大，避免误点 */
+  .action-btn { padding: 8px 12px; }
 }
