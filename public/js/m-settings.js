@@ -57,28 +57,87 @@
     } catch (e) { /* 已提示 */ }
   }
 
-  // ---------- 编辑资料 ----------
-  function editProfileSheet() {
-    var years = '';
-    var now = new Date().getFullYear();
-    for (var y = now; y >= now - 10; y--) {
-      years += '<option value="' + y + '"' + (user.enrollmentYear === y ? ' selected' : '') + '>' + y + ' 年</option>';
+  // ---------- 学校 / 入学年份 / 班级（数据源：/api/schools 的 classInfo） ----------
+  var schools = [];
+  var schoolsLoaded = false;
+
+  async function ensureSchools() {
+    if (schoolsLoaded) return;
+    try {
+      var d = await mApp.api.get('/api/schools', { silent: true });
+      schools = (d && d.schools) || [];
+    } catch (e) { schools = []; }
+    schoolsLoaded = true;
+  }
+
+  function findSchool(name) {
+    return schools.filter(function (s) { return s.name === name; })[0];
+  }
+
+  // 入学年份：各学校 classInfo 的年份并集（降序），并保证当前值可选
+  function yearList() {
+    var seen = {};
+    schools.forEach(function (s) {
+      (s.classInfo || []).forEach(function (ci) { if (ci && ci.year) seen[ci.year] = 1; });
+    });
+    var list = Object.keys(seen).map(Number).sort(function (a, b) { return b - a; });
+    if (user.enrollmentYear && list.indexOf(user.enrollmentYear) < 0) list.unshift(user.enrollmentYear);
+    return list;
+  }
+
+  // 班级：所选 学校+年份 的 classCount → 1班…N班
+  function classList(schoolName, year) {
+    var school = findSchool(schoolName);
+    var info = school && (school.classInfo || []).filter(function (ci) { return ci.year === year; })[0];
+    var list = [];
+    if (info && info.classCount) {
+      for (var i = 1; i <= info.classCount; i++) list.push(i + '班');
     }
-    var gender = user.gender || '';
+    return list;
+  }
+
+  // ---------- 编辑资料 ----------
+  async function editProfileSheet() {
+    await ensureSchools();
+    var configured = schools.length > 0;
+    var gender = user.gender === 'secret' ? '' : (user.gender || '');
+
+    var years = yearList().map(function (y) {
+      return '<option value="' + y + '"' + (user.enrollmentYear === y ? ' selected' : '') + '>' +
+        y + ' 年</option>';
+    }).join('');
+
+    var schoolField;
+    if (configured) {
+      var inConfig = !!findSchool(user.school);
+      schoolField = '<select class="m-input" id="ep-school">' +
+        '<option value="">请选择学校</option>' +
+        schools.map(function (s) {
+          return '<option value="' + esc(s.name) + '"' + (user.school === s.name ? ' selected' : '') + '>' +
+            esc(s.name) + '</option>';
+        }).join('') +
+        ((user.school && !inConfig)
+          ? '<option value="' + esc(user.school) + '" selected>' + esc(user.school) + '（当前）</option>' : '') +
+      '</select>';
+    } else {
+      schoolField = '<input class="m-input" id="ep-school" maxlength="50" value="' + esc(user.school || '') + '">';
+    }
+
     var html =
       '<div class="m-field"><label class="m-label">用户名</label>' +
         '<input class="m-input" id="ep-username" maxlength="20" value="' + esc(user.username || '') + '"></div>' +
-      '<div class="m-field"><label class="m-label">学校</label>' +
-        '<input class="m-input" id="ep-school" maxlength="50" value="' + esc(user.school || '') + '"></div>' +
+      '<div class="m-field"><label class="m-label">学校</label>' + schoolField + '</div>' +
       '<div class="m-field"><label class="m-label">入学年份</label>' +
-        '<select class="m-input" id="ep-year">' + years + '</select></div>' +
+        '<select class="m-input" id="ep-year"><option value="">请选择入学年份</option>' + years + '</select></div>' +
       '<div class="m-field"><label class="m-label">班级</label>' +
-        '<input class="m-input" id="ep-class" maxlength="30" value="' + esc(user.className || '') + '"></div>' +
+        '<select class="m-input" id="ep-class" disabled><option value="">请先选择学校与入学年份</option></select>' +
+        '<p class="m-hint" id="ep-class-hint" style="margin-top:6px"></p></div>' +
       '<div class="m-field"><label class="m-label">性别</label>' +
         '<select class="m-input" id="ep-gender">' +
           '<option value="">不设置</option>' +
           '<option value="male"' + (gender === 'male' ? ' selected' : '') + '>男</option>' +
           '<option value="female"' + (gender === 'female' ? ' selected' : '') + '>女</option>' +
+          '<option value="other"' + (gender === 'other' ? ' selected' : '') + '>其他</option>' +
         '</select></div>' +
       '<div class="m-field"><label class="m-label">生日</label>' +
         '<input class="m-input" id="ep-birthday" type="date" value="' + esc(user.birthday || '') + '"></div>' +
@@ -88,7 +147,68 @@
       '<div class="m-sheet-foot"><button class="m-btn m-btn-primary m-btn-block" id="ep-save">保存资料</button></div>';
 
     var s = mApp.sheet('编辑资料', html);
-    s.body.querySelector('#ep-save').addEventListener('click', async function () {
+    var B = function (sel) { return s.body.querySelector(sel); };
+
+    // 班级下拉：随 学校/入学年份 联动；无配置时退化为输入框，避免保存被卡住
+    function fillClasses() {
+      var el = B('#ep-class');
+      var hint = B('#ep-class-hint');
+      if (!configured) {
+        if (el && el.tagName === 'SELECT') {
+          el.outerHTML = '<input class="m-input" id="ep-class" maxlength="30" value="' +
+            esc(user.className || '') + '">';
+        }
+        hint.textContent = '本站未配置学校班级信息，可手工填写';
+        return;
+      }
+
+      var schoolName = (B('#ep-school') || {}).value || '';
+      var year = parseInt((B('#ep-year') || {}).value, 10);
+
+      if (!schoolName || !year) {
+        if (el && el.tagName !== 'SELECT') {
+          el.outerHTML = '<select class="m-input" id="ep-class" disabled></select>';
+          el = B('#ep-class');
+        }
+        if (el) {
+          el.disabled = true;
+          el.innerHTML = '<option value="">请先选择学校与入学年份</option>';
+        }
+        hint.textContent = '';
+        return;
+      }
+
+      var list = classList(schoolName, year);
+      // 当前就是本人所在学校/年份时，保留其现有班级，避免"只想改别的字段却被迫重选"
+      var keep = (schoolName === user.school && year === user.enrollmentYear)
+        ? (user.className || '') : '';
+
+      if (!list.length) {
+        if (el && el.tagName === 'SELECT') {
+          el.outerHTML = '<input class="m-input" id="ep-class" maxlength="30" value="' + esc(keep) + '">';
+        }
+        hint.textContent = '该学校 / 年份暂无班级配置，可手工填写';
+        return;
+      }
+
+      if (el && el.tagName !== 'SELECT') {
+        el.outerHTML = '<select class="m-input" id="ep-class"></select>';
+        el = B('#ep-class');
+      }
+      el.disabled = false;
+      el.innerHTML = '<option value="">请选择班级</option>' + list.map(function (c) {
+        return '<option value="' + esc(c) + '">' + esc(c) + '</option>';
+      }).join('');
+      if (keep && list.indexOf(keep) > -1) el.value = keep;
+      hint.textContent = '';
+    }
+
+    fillClasses();
+    s.body.addEventListener('change', function (e) {
+      if (e.target && (e.target.id === 'ep-school' || e.target.id === 'ep-year')) fillClasses();
+    });
+
+    B('#ep-save').addEventListener('click', async function () {
       var update = {};
       if (input('ep-username') !== (user.username || '')) update.username = input('ep-username');
       if (input('ep-school') !== (user.school || '')) update.school = input('ep-school');
@@ -106,7 +226,12 @@
 
       if (!Object.keys(update).length) { mApp.toast('没有检测到任何更改', 'info'); return; }
 
-      var btn = s.body.querySelector('#ep-save');
+      // 学校/入学年份/班级是后端必填项，空值先在前端拦下（避免直接 400）
+      if (!input('ep-school')) { mApp.toast('请选择学校', 'warning'); return; }
+      if (!parseInt(input('ep-year'), 10)) { mApp.toast('请选择入学年份', 'warning'); return; }
+      if (!input('ep-class')) { mApp.toast('请选择班级', 'warning'); return; }
+
+      var btn = B('#ep-save');
       btn.disabled = true;
       try {
         await mApp.api.put('/api/users/' + encodeURIComponent(user.id), update);
@@ -114,7 +239,11 @@
         renderCard();
         s.close();
         mApp.toast('资料已保存', 'success');
-      } catch (e) { btn.disabled = false; }
+      } catch (e) {
+        // 失败原因（后端校验/重名等）同时打到控制台，便于排查
+        console.error('保存资料失败:', (e && (e.data || e.message)) || e, update);
+        btn.disabled = false;
+      }
     });
   }
 
