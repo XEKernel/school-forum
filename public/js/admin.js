@@ -499,7 +499,7 @@ fetchWithTimeout: function(url, options = {}) {
                 postsContainer.innerHTML = '<div class="empty-state">暂无最近帖子</div>';
             } else {
                 postsContainer.innerHTML = posts.slice(0, 5).map(post => {
-                    const username = post.anonymous ? '匿名用户' : esc(post.username || '未知用户');
+                    const username = (post.anonymous ? ('匿名用户（实际：' + esc((post.realAuthor && post.realAuthor.username) || '未知') + '）') : esc(post.username || '未知用户'));
                     const preview = esc((post.content || '').substring(0, 50)) + ((post.content || '').length > 50 ? '...' : '');
                     return `
                     <div class="activity-item">
@@ -591,7 +591,7 @@ renderPostsList: function(posts) {
   container.innerHTML = posts.map(post => {
     // 转义防 XSS（用户名/学校/班级为用户可控数据）
     const esc = (s) => this.escapeHtml(s);
-    const username = post.anonymous ? '匿名用户' : esc(post.username || '未知用户');
+    const username = (post.anonymous ? ('匿名用户（实际：' + esc((post.realAuthor && post.realAuthor.username) || '未知') + '）') : esc(post.username || '未知用户'));
     return `
     <tr>
       <td>
@@ -2380,7 +2380,7 @@ confirmDeletePost: async function() {
         container.innerHTML = comments.map(comment => {
             // 转义防 XSS（用户名/学校/班级为用户可控数据）
             const esc = (s) => this.escapeHtml(s);
-            const username = comment.anonymous ? '匿名用户' : esc(comment.username || '未知用户');
+            const username = (comment.anonymous ? ('匿名用户（实际：' + esc((comment.realAuthor && comment.realAuthor.username) || '未知') + '）') : esc(comment.username || '未知用户'));
             return `
             <tr>
                 <td>
@@ -2504,7 +2504,7 @@ confirmDeletePost: async function() {
                 ? `<div class="admin-comment-replies">${this.renderCommentsTree(comment.replies, depth + 1)}</div>` 
                 : '';
             // 转义防 XSS（评论用户名为用户可控数据）
-            const username = comment.anonymous ? '匿名用户' : this.escapeHtml(comment.username || '未知用户');
+            const username = (comment.anonymous ? ('匿名用户（实际：' + this.escapeHtml((comment.realAuthor && comment.realAuthor.username) || '未知') + '）') : this.escapeHtml(comment.username || '未知用户'));
 
             return `
                 <div class="admin-comment-item" data-depth="${depth}">
@@ -2546,7 +2546,7 @@ confirmDeletePost: async function() {
                 <div class="post-detail-sidebar">
                     <div class="post-info-section">
                         <h4><i class="fas fa-user"></i> 作者信息</h4>
-                        <p><strong>用户名：</strong>${post.anonymous ? '匿名用户' : this.escapeHtml(post.username || '未知用户')}</p>
+                        <p><strong>用户名：</strong>${(post.anonymous ? ('匿名用户（实际：' + this.escapeHtml((post.realAuthor && post.realAuthor.username) || '未知') + '）') : this.escapeHtml(post.username || '未知用户'))}</p>
                         ${!post.anonymous ? `
                         <p><strong>学校：</strong>${this.escapeHtml(post.school || '未设置')}</p>
                         <p><strong>年级：</strong>${this.escapeHtml(post.grade || '未设置')}</p>

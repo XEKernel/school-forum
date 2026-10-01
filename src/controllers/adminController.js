@@ -71,8 +71,24 @@ const adminController = {
         Post.countDocuments(query)
       ]);
 
+      // 管理员可见匿名帖的真实作者：匿名帖入库时 username 已脱敏，这里按 userId 反查补 realAuthor
+      const anonAuthorIds = [...new Set(posts.filter(p => p && p.anonymous && p.userId).map(p => p.userId))];
+      const anonAuthorMap = {};
+      for (const aid of anonAuthorIds) {
+        const au = await getUserById(aid);
+        if (au) {
+          anonAuthorMap[aid] = {
+            id: au.id, username: au.username,
+            school: au.school || '', grade: au.grade || '', className: au.className || ''
+          };
+        }
+      }
+      const postsWithAuthor = posts.map(p => (p && p.anonymous)
+        ? Object.assign({}, p, { realAuthor: anonAuthorMap[p.userId] || null })
+        : p);
+
       res.json(generateSuccessResponse({
-        posts,
+        posts: postsWithAuthor,
         pagination: {
           currentPage: pageNum,
           totalPages: Math.ceil(total / limitNum),
@@ -486,6 +502,20 @@ const adminController = {
         postId: r.postId,
         postContent: r.postContent + (r.contentLen > 50 ? '...' : '')
       }));
+
+      // 匿名评论同样补真实作者（管理员可见）
+      const anonCIds = [...new Set(comments.filter(c => c && c.anonymous && c.userId).map(c => c.userId))];
+      const anonCMap = {};
+      for (const cid of anonCIds) {
+        const au = await getUserById(cid);
+        if (au) {
+          anonCMap[cid] = {
+            id: au.id, username: au.username,
+            school: au.school || '', grade: au.grade || '', className: au.className || ''
+          };
+        }
+      }
+      comments.forEach(c => { if (c && c.anonymous) c.realAuthor = anonCMap[c.userId] || null; });
 
       res.json(generateSuccessResponse({
         comments,
