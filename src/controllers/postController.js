@@ -1376,6 +1376,8 @@ const postController = {
       }
       
       await updatePost(postId, { comments });
+      // 清除帖子缓存（缺了它，后续 GET 会命中旧缓存：新回复看不到、评论点赞态回退）
+      await postCache.delete(postId);
       
       // 更新用户评论数（原子自增，见 adjustUserCommentCount）
       await adjustUserCommentCount(userId, 1);
@@ -1460,6 +1462,9 @@ const postController = {
 
       await updatePost(postId, { comments });
 
+      // 清除帖子缓存（缺了它，后续 GET 会命中旧缓存：新回复看不到、评论点赞态回退）
+      await postCache.delete(postId);
+
       logger.logUserAction(liked ? '点赞评论' : '取消点赞评论', userId, null, {
         postId,
         commentId,
@@ -1539,6 +1544,9 @@ const postController = {
       targetReply.likedBy = newLikedBy;
 
       await updatePost(postId, { comments });
+
+      // 清除帖子缓存（缺了它，后续 GET 会命中旧缓存：新回复看不到、评论点赞态回退）
+      await postCache.delete(postId);
 
       logger.logUserAction(liked ? '点赞回复' : '取消点赞回复', userId, null, {
         postId,
