@@ -277,9 +277,10 @@
       var klass = [post.school, post.grade, post.className].filter(Boolean).join(' · ');
       var avatar = post.anonymous
         ? '<div class="m-avatar m-anon">匿</div>'
-        : '<div class="m-avatar"' + (post.userAvatar
-            ? ' style="background-image:url(\'' + this.escape(post.userAvatar) + '\')"'
-            : '') + '>' + (post.userAvatar ? '' : this.escape((post.className || '?').slice(0, 1))) + '</div>';
+        : '<div class="m-avatar" data-avatar="' + this.escape(post.userId || '') + '" title="查看 TA 的主页"' +
+            (post.userAvatar
+              ? ' style="background-image:url(\'' + this.escape(post.userAvatar) + '\')"'
+              : '') + '>' + (post.userAvatar ? '' : this.escape((post.className || '?').slice(0, 1))) + '</div>';
 
       var tags = post.anonymous
         ? '<span class="m-tag m-tag-anon">匿名</span>'
@@ -315,13 +316,40 @@
         '</article>';
     },
 
-    // 图片压缩（>500KB 且超宽才压，GIF 跳过以免丢帧）
+    // 图片压缩 / 规范化：保证输出一定是服务端接受的格式（jpg/png/gif/webp）+ 正确扩展名
+    // 服务端对本地上传做「扩展名 + mimetype + 文件头」三重校验，手机拍出的 HEIC/AVIF、
+    // 或扩展名缺失/异常的文件会被 400 静默拒绝，这里统一转成 JPEG（GIF 保留以免丢帧）
     compressImage: function (file, maxWidth, quality) {
       maxWidth = maxWidth || 1920;
       quality = quality || 0.8;
       if (!file || !file.type || file.type.indexOf('image/') !== 0) return Promise.resolve(file);
-      if (file.type === 'image/gif') return Promise.resolve(file);
-      if (file.size < 500 * 1024) return Promise.resolve(file);
+
+      var EXT = {
+        'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png',
+        'image/gif': '.gif', 'image/webp': '.webp'
+      };
+      var fixName = function (n, ext) {
+        n = String(n || 'image');
+        return new RegExp('\\' + ext + '$', 'i').test(n)
+          ? n
+          : n.replace(/\.[^.\\/]+$/, '') + ext;
+      };
+      var withName = function (blob, name, type) {
+        return new File([blob], name, { type: type, lastModified: Date.now() });
+      };
+
+      var ext = EXT[file.type];
+      // 类型与扩展名都规范、且文件不大 → 原样上传
+      if (ext && fixName(file.name, ext) === file.name && file.size < 500 * 1024) {
+        return Promise.resolve(file);
+      }
+      // GIF：不压缩（重编码会丢帧），只纠正扩展名
+      if (file.type === 'image/gif') {
+        return Promise.resolve(withName(file, fixName(file.name, '.gif'), 'image/gif'));
+      }
+
+      var outType = ext || 'image/jpeg';                 // 非白名单类型（HEIC/AVIF/BMP…）统一转 JPEG
+      var outName = fixName(file.name, ext || '.jpg');
 
       return new Promise(function (resolve) {
         var reader = new FileReader();
@@ -334,9 +362,8 @@
             canvas.width = w; canvas.height = h;
             canvas.getContext('2d').drawImage(img, 0, 0, w, h);
             canvas.toBlob(function (blob) {
-              if (!blob) return resolve(file);
-              resolve(new File([blob], file.name, { type: file.type, lastModified: Date.now() }));
-            }, file.type, quality);
+              resolve(withName(blob || file, outName, blob ? outType : 'image/jpeg'));
+            }, outType, quality);
           };
           img.onerror = function () { resolve(file); };
           img.src = e.target.result;
@@ -471,6 +498,18 @@
     bindPostActions: function (root, ctx) {
       ctx = ctx || {};
       root.addEventListener('click', async function (e) {
+        // 点头像 → 进入该用户主页（与桌面版一致）；匿名帖不携带作者 id，不受影响
+        var av = e.target.closest('[data-avatar]');
+        if (av) {
+          var auid = av.getAttribute('data-avatar');
+          if (auid) {
+            e.preventDefault();
+            e.stopPropagation();
+            location.href = 'm-user.html?id=' + encodeURIComponent(auid);
+            return;
+          }
+        }
+
         var viewImg = e.target.closest('[data-view]');
         if (viewImg) { mApp.openImage(viewImg.getAttribute('data-view')); return; }
 

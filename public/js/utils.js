@@ -226,15 +226,31 @@ const utils = {
     document.addEventListener('keydown', escHandler);
   },
 
-  // 图片压缩函数
+  // 图片压缩 / 规范化：保证输出一定是服务端接受的格式（jpg/png/gif/webp）+ 正确扩展名
+  // 服务端对本地上传做「扩展名 + mimetype + 文件头」三重校验，HEIC/AVIF 或扩展名异常的
+  // 文件会被 400 静默拒绝，这里统一转成 JPEG（GIF 保留以免丢帧）
   compressImage: function(file, maxWidth = 1920, quality = 0.8) {
     if (!file || !file.type || !file.type.startsWith('image/')) {
       return Promise.resolve(file);
     }
 
-    if (file.size < 500 * 1024) {
+    const EXT = { 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png', 'image/gif': '.gif', 'image/webp': '.webp' };
+    const fixName = (n, ext) => {
+      n = String(n || 'image');
+      return new RegExp('\\' + ext + '$', 'i').test(n) ? n : n.replace(/\.[^.\/]+$/, '') + ext;
+    };
+    const withName = (blob, name, type) => new File([blob], name, { type: type, lastModified: Date.now() });
+
+    const ext = EXT[file.type];
+    if (ext && fixName(file.name, ext) === file.name && file.size < 500 * 1024) {
       return Promise.resolve(file);
     }
+    if (file.type === 'image/gif') {
+      return Promise.resolve(withName(file, fixName(file.name, '.gif'), 'image/gif'));
+    }
+
+    const outType = ext || 'image/jpeg';
+    const outName = fixName(file.name, ext || '.jpg');
 
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -256,15 +272,13 @@ const utils = {
           ctx.drawImage(img, 0, 0, width, height);
 
           canvas.toBlob(function(blob) {
-            const compressedFile = new File([blob], file.name, {
-              type: file.type,
-              lastModified: Date.now()
-            });
-            resolve(compressedFile);
-          }, file.type, quality);
+            resolve(withName(blob || file, outName, blob ? outType : 'image/jpeg'));
+          }, outType, quality);
         };
+        img.onerror = function() { resolve(file); };
         img.src = e.target.result;
       };
+      reader.onerror = function() { resolve(file); };
       reader.readAsDataURL(file);
     });
   },
