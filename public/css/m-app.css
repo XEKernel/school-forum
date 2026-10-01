@@ -376,17 +376,19 @@ img {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--m-primary-light);
+  /* 用 background-color 而非 background 简写：简写会把下面两行 size/position 重置掉 */
+  background-color: var(--m-primary-light);
+  background-size: cover;
+  background-position: center;
   color: var(--m-primary);
   font-size: 15px;
   font-weight: 600;
-  background-size: cover;
-  background-position: center;
   overflow: hidden;
 }
 
+/* 匿名头像：同上，避免简写重置 background-size/position */
 .m-avatar.m-anon {
-  background: #eceef1;
+  background-color: #eceef1;
   color: var(--m-text-3);
 }
 
@@ -843,7 +845,9 @@ img {
   width: 58px;
   height: 58px;
   font-size: 21px;
-  background: rgba(255, 255, 255, .2);
+  /* 必须用 background-color：background 简写会重置 .m-avatar 的 background-size/position，
+     导致大图（如 2048×2048）只按 0% 0% 原尺寸露出左上角，看起来像"头像不显示" */
+  background-color: rgba(255, 255, 255, .2);
   color: #fff;
   box-shadow: 0 0 0 3px rgba(255, 255, 255, .18);
 }
