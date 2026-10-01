@@ -256,11 +256,12 @@ app.use((req, res, next) => {
     limit = sec.rateLimitComment || 20;
     windowMs = (sec.rateLimitCommentWindow || 60) * 1000;
     message = '评论过于频繁，请稍后再试';
-  } else if (req.method === 'GET' && (path.includes('/messages/unread') || path.includes('/notifications') || path.includes('/messages/conversations') || path.includes('/updates') || path.includes('/posts') || path.includes('/comments') || path.includes('/categories') || path.includes('/announcements'))) {
-    // 前端只读浏览/轮询接口（帖子列表、评论、栏目、公告、未读数、通知）：
-    // 宽松限流，避免多标签页/页面初始化请求误触 429（写操作仍走严格/中等限流）
-    limit = 300;
-    windowMs = 60 * 1000;
+  } else if ((req.method === 'GET' || req.method === 'HEAD') && path.startsWith('/api/') && !path.includes('/export-data')) {
+    // 只读 GET 一律宽松档（统计、登录态校验、用户资料、帖子/评论/栏目/公告、
+    // 未读数与各类轮询）：页面初始化 + 60s 定时刷新 + 多端/共享出口 IP 很容易
+    // 打满通用档而误触 429。写操作仍走严格/中等限流；导出数据较重，留在通用档。
+    limit = sec.rateLimitRead || 600;
+    windowMs = (sec.rateLimitReadWindow || 60) * 1000;
     message = '请求过于频繁，请稍后再试';
   } else {
     // 通用 API 限流
