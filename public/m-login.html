@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2b6cb0">
+  <title>登录/注册 - 校园论坛</title>
+  <link rel="icon" type="image/svg+xml" href="/images/logo.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/m-app.css">
+</head>
+<body>
+  <header class="m-appbar">
+    <button class="m-iconbtn m-back" id="m-back" aria-label="返回"><i class="fas fa-chevron-left"></i></button>
+    <div class="m-appbar-title">登录 / 注册</div>
+  </header>
+
+  <main class="m-content m-no-fab">
+    <div class="m-seg" id="m-tabs">
+      <button data-tab="login" class="active">登录</button>
+      <button data-tab="register">注册</button>
+    </div>
+
+    <!-- 登录 -->
+    <form class="m-form" id="form-login" autocomplete="off" novalidate>
+      <div class="m-field">
+        <label class="m-label">邮箱</label>
+        <input class="m-input" id="lg-email" type="email" placeholder="you@example.com">
+      </div>
+      <div class="m-field">
+        <label class="m-label">QQ号</label>
+        <input class="m-input" id="lg-qq" inputmode="numeric" placeholder="注册时填写的QQ号">
+      </div>
+      <div class="m-field">
+        <label class="m-label">密码</label>
+        <input class="m-input" id="lg-password" type="password" placeholder="登录密码">
+      </div>
+      <div class="m-field">
+        <label class="m-label">图形验证码</label>
+        <div class="m-captcha">
+          <img id="lg-captcha-img" alt="图形验证码" title="点击刷新">
+          <input class="m-input" id="lg-captcha-code" placeholder="输入图中字符" maxlength="6">
+        </div>
+      </div>
+      <div class="m-field">
+        <label class="m-label">邮箱验证码</label>
+        <div class="m-row-inline">
+          <input class="m-input" id="lg-code" inputmode="numeric" placeholder="6 位验证码" maxlength="8">
+          <button type="button" class="m-btn m-btn-ghost m-btn-sm" id="lg-send">获取验证码</button>
+        </div>
+        <p class="m-hint" style="margin-top:6px">安全校验：登录需同时验证邮箱与密码</p>
+      </div>
+      <button type="submit" class="m-btn m-btn-primary m-btn-block" id="lg-submit" style="margin-top:16px">登录</button>
+      <div class="m-form-foot"><span class="m-link" id="lg-forgot">忘记密码？</span></div>
+    </form>
+
+    <!-- 注册 -->
+    <form class="m-form" id="form-register" style="display:none" autocomplete="off" novalidate>
+      <div class="m-field">
+        <label class="m-label">邮箱</label>
+        <input class="m-input" id="rg-email" type="email" placeholder="用于接收验证码">
+      </div>
+      <div class="m-field">
+        <label class="m-label">QQ号</label>
+        <input class="m-input" id="rg-qq" inputmode="numeric" placeholder="5-15 位数字">
+      </div>
+      <div class="m-field">
+        <label class="m-label">用户名</label>
+        <input class="m-input" id="rg-username" placeholder="2-20 位中文、字母、数字或下划线" maxlength="20">
+      </div>
+      <div class="m-field">
+        <label class="m-label">密码</label>
+        <input class="m-input" id="rg-password" type="password" placeholder="至少 8 位，含大小写字母和数字">
+      </div>
+      <div class="m-field">
+        <label class="m-label">学校</label>
+        <input class="m-input" id="rg-school" list="m-schools" placeholder="输入学校名称">
+        <datalist id="m-schools"></datalist>
+      </div>
+      <div class="m-field">
+        <label class="m-label">入学年份</label>
+        <select class="m-input" id="rg-year"></select>
+      </div>
+      <div class="m-field">
+        <label class="m-label">班级</label>
+        <input class="m-input" id="rg-class" placeholder="如 1班、高一(3)班" maxlength="30">
+      </div>
+      <div class="m-field">
+        <label class="m-label">图形验证码</label>
+        <div class="m-captcha">
+          <img id="rg-captcha-img" alt="图形验证码" title="点击刷新">
+          <input class="m-input" id="rg-captcha-code" placeholder="输入图中字符" maxlength="6">
+        </div>
+      </div>
+      <div class="m-field">
+        <label class="m-label">邮箱验证码</label>
+        <div class="m-row-inline">
+          <input class="m-input" id="rg-code" inputmode="numeric" placeholder="6 位验证码" maxlength="8">
+          <button type="button" class="m-btn m-btn-ghost m-btn-sm" id="rg-send">获取验证码</button>
+        </div>
+      </div>
+      <button type="submit" class="m-btn m-btn-primary m-btn-block" id="rg-submit" style="margin-top:16px">注册</button>
+    </form>
+
+    <div id="m-qq-wrap" style="display:none">
+      <div class="m-form-sep">或</div>
+      <button class="m-btn m-btn-ghost m-btn-block" id="m-qq-login">
+        <i class="fab fa-qq"></i>QQ 快捷登录
+      </button>
+    </div>
+
+    <p class="m-hint" style="text-align:center;margin-top:16px">
+      登录即表示同意遵守校园论坛社区规范
+    </p>
+  </main>
+
+  <script defer src="/js/m-app.js"></script>
+  <script defer src="/js/m-login.js"></script>
+</body>
+</html>

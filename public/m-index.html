@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2b6cb0">
+  <title>校园论坛</title>
+  <link rel="icon" type="image/svg+xml" href="/images/logo.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/m-app.css">
+  <script defer src="/libs/markdown-it/markdown-it.min.js"></script>
+  <script src="/libs/highlight.js/highlight.min.js"></script>
+  <script src="/js/mathjax-full.js"></script>
+  <script id="MathJax-script" src="/libs/mathjax/tex-svg-full.js"></script>
+</head>
+<body>
+  <header class="m-appbar">
+    <div class="m-appbar-title">
+      <div class="m-brand"><i class="fas fa-comments"></i>校园论坛</div>
+    </div>
+    <button class="m-iconbtn" id="m-search-btn" aria-label="搜索"><i class="fas fa-magnifying-glass"></i></button>
+  </header>
+
+  <!-- 搜索覆盖层 -->
+  <div class="m-search" id="m-search">
+    <div class="m-search-bar">
+      <div class="m-search-field">
+        <i class="fas fa-magnifying-glass"></i>
+        <input type="search" id="m-search-input" placeholder="搜索帖子内容或用户" autocomplete="off">
+      </div>
+      <button class="m-iconbtn" id="m-search-cancel">取消</button>
+    </div>
+    <div class="m-search-body" id="m-search-body"></div>
+  </div>
+
+  <main class="m-content" id="m-content">
+    <div id="m-announce-host"></div>
+    <div class="m-chips" id="m-cats"></div>
+    <div class="m-chips" id="m-sorts">
+      <button class="m-chip m-chip-plain active" data-sort="recommended">推荐</button>
+      <button class="m-chip m-chip-plain" data-sort="latest">最新</button>
+      <button class="m-chip m-chip-plain" data-sort="hot">热门</button>
+      <button class="m-chip m-chip-plain" data-sort="likes">点赞</button>
+    </div>
+    <div id="m-list"></div>
+    <div class="m-loadmore" id="m-more" style="display:none">上拉加载更多</div>
+  </main>
+
+  <script defer src="/js/m-app.js"></script>
+  <script defer src="/js/m-home.js"></script>
+</body>
+</html>

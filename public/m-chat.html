@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2b6cb0">
+  <title>私信 - 校园论坛</title>
+  <link rel="icon" type="image/svg+xml" href="/images/logo.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/m-app.css">
+</head>
+<body>
+  <!-- 会话列表视图 -->
+  <header class="m-appbar" id="bar-list">
+    <button class="m-iconbtn m-back" id="m-back" aria-label="返回"><i class="fas fa-chevron-left"></i></button>
+    <div class="m-appbar-title">私信</div>
+    <button class="m-iconbtn" id="m-new" aria-label="发起私信" title="发起私信"><i class="fas fa-pen-to-square"></i></button>
+  </header>
+
+  <!-- 聊天视图 -->
+  <header class="m-appbar" id="bar-chat" style="display:none">
+    <button class="m-iconbtn m-back" id="m-chat-back" aria-label="返回"><i class="fas fa-chevron-left"></i></button>
+    <div class="m-appbar-title" id="m-chat-title">聊天</div>
+    <a class="m-iconbtn" id="m-chat-profile" title="查看资料"><i class="fas fa-user"></i></a>
+  </header>
+
+  <main class="m-content m-no-fab" id="m-list-view">
+    <div id="m-convs"></div>
+  </main>
+
+  <main class="m-content m-has-cmtbar" id="m-chat-view" style="display:none">
+    <div class="m-msgs" id="m-msgs"></div>
+  </main>
+
+  <div class="m-cmtbar" id="m-sendbar" style="display:none">
+    <label class="m-iconbtn" for="m-img-input" title="发送图片"><i class="fas fa-image"></i></label>
+    <input type="file" id="m-img-input" accept="image/*" hidden>
+    <textarea id="m-msg-input" rows="1" placeholder="发消息…"></textarea>
+    <button class="m-send" id="m-msg-send" aria-label="发送"><i class="fas fa-paper-plane"></i></button>
+  </div>
+
+  <script defer src="/js/m-app.js"></script>
+  <script defer src="/js/m-chat.js"></script>
+</body>
+</html>

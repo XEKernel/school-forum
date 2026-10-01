@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2b6cb0">
+  <title>发布帖子 - 校园论坛</title>
+  <link rel="icon" type="image/svg+xml" href="/images/logo.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/m-app.css">
+</head>
+<body>
+  <header class="m-appbar">
+    <button class="m-iconbtn m-back" id="m-back" aria-label="返回"><i class="fas fa-chevron-left"></i></button>
+    <div class="m-appbar-title" id="m-title">发布帖子</div>
+    <button class="m-btn m-btn-primary m-btn-sm" id="m-submit">发布</button>
+  </header>
+
+  <main class="m-content m-no-fab">
+    <div class="m-form">
+      <textarea class="m-input m-editor" id="m-content" placeholder="分享你的想法…&#10;&#10;支持 Markdown 格式"></textarea>
+
+      <div class="m-picker" id="m-picker"></div>
+
+      <div class="m-row-inline" style="margin-top:12px;justify-content:space-between">
+        <label class="m-upload" for="m-file">
+          <i class="fas fa-image"></i> 添加图片
+        </label>
+        <span class="m-hint" id="m-img-hint">最多 9 张</span>
+        <input type="file" id="m-file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
+      </div>
+
+      <div class="m-field" style="margin-top:16px">
+        <label class="m-label">栏目</label>
+        <select class="m-input" id="m-category">
+          <option value="">不选择栏目</option>
+        </select>
+      </div>
+
+      <div class="m-row-inline m-toggle-row" id="m-anon-row">
+        <div>
+          <div class="m-row-label">匿名发布</div>
+          <div class="m-hint">其他用户看不到你的用户名和班级</div>
+        </div>
+        <label class="m-switch">
+          <input type="checkbox" id="m-anon">
+          <span></span>
+        </label>
+      </div>
+    </div>
+
+    <p class="m-hint" style="margin-top:12px;text-align:center">
+      请遵守社区规范，禁止发布违规内容
+    </p>
+  </main>
+
+  <script defer src="/js/m-app.js"></script>
+  <script defer src="/js/m-edit.js"></script>
+</body>
+</html>

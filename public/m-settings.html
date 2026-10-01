@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#2b6cb0">
+  <title>设置 - 校园论坛</title>
+  <link rel="icon" type="image/svg+xml" href="/images/logo.svg">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/css/m-app.css">
+</head>
+<body>
+  <header class="m-appbar">
+    <button class="m-iconbtn m-back" id="m-back" aria-label="返回"><i class="fas fa-chevron-left"></i></button>
+    <div class="m-appbar-title">设置</div>
+  </header>
+
+  <main class="m-content m-no-fab" id="m-content">
+    <!-- 个人资料卡 -->
+    <div class="m-card" style="padding:16px">
+      <div style="display:flex;align-items:center;gap:14px">
+        <label for="set-avatar-file" style="position:relative;cursor:pointer" title="更换头像">
+          <div class="m-avatar" id="set-avatar-img" style="width:64px;height:64px;font-size:22px">?</div>
+          <span style="position:absolute;right:-4px;bottom:-4px;width:24px;height:24px;border-radius:50%;background:var(--m-primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;box-shadow:0 0 0 2px #fff">
+            <i class="fas fa-camera"></i>
+          </span>
+        </label>
+        <input type="file" id="set-avatar-file" accept="image/*" hidden>
+        <div style="flex:1;min-width:0">
+          <div class="m-user-name" id="set-name">—</div>
+          <div class="m-user-sub" id="set-sub">—</div>
+        </div>
+        <button class="m-btn m-btn-ghost m-btn-sm" id="set-edit-profile">编辑资料</button>
+      </div>
+    </div>
+
+    <!-- 账号安全 -->
+    <div class="m-section-title" style="margin-top:16px"><span><i class="fas fa-shield-halved"></i>账号安全</span></div>
+    <div class="m-list">
+      <button class="m-row" id="set-password">
+        <i class="fas fa-key m-row-ico"></i><span class="m-row-label">修改密码</span>
+        <i class="fas fa-chevron-right m-chev"></i>
+      </button>
+      <button class="m-row" id="set-email">
+        <i class="fas fa-envelope m-row-ico"></i><span class="m-row-label">修改邮箱</span>
+        <span class="m-row-value" id="set-email-val"></span>
+        <i class="fas fa-chevron-right m-chev"></i>
+      </button>
+      <button class="m-row" id="set-qq">
+        <i class="fab fa-qq m-row-ico"></i><span class="m-row-label">QQ 绑定</span>
+        <span class="m-row-value" id="set-qq-val">查询中…</span>
+        <i class="fas fa-chevron-right m-chev"></i>
+      </button>
+    </div>
+
+    <!-- 通知设置 -->
+    <div class="m-section-title" style="margin-top:16px">
+      <span><i class="fas fa-bell"></i>通知设置</span>
+      <span class="m-link" id="set-notify-hint">改动即保存</span>
+    </div>
+    <div class="m-list" id="set-notify"></div>
+
+    <!-- 隐私设置 -->
+    <div class="m-section-title" style="margin-top:16px"><span><i class="fas fa-user-lock"></i>隐私设置</span></div>
+    <div class="m-list" id="set-privacy"></div>
+    <div class="m-field" style="margin-top:12px">
+      <label class="m-label">帖子展示时间范围</label>
+      <select class="m-input" id="set-range">
+        <option value="all">全部帖子</option>
+        <option value="3days">近 3 天</option>
+        <option value="7days">近 7 天</option>
+        <option value="1month">近 1 个月</option>
+        <option value="6months">近半年</option>
+        <option value="1year">近 1 年</option>
+      </select>
+      <p class="m-hint" style="margin-top:6px">此设置仅影响他人查看你的帖子，你自己始终可见全部</p>
+    </div>
+    <div class="m-section-title" style="margin-top:14px"><span>资料可见性</span></div>
+    <div class="m-list" id="set-visibility"></div>
+    <button class="m-btn m-btn-primary m-btn-block" id="set-save-privacy" style="margin-top:14px">
+      保存隐私设置
+    </button>
+
+    <!-- 数据与账号 -->
+    <div class="m-section-title" style="margin-top:16px"><span><i class="fas fa-database"></i>数据与账号</span></div>
+    <div class="m-list">
+      <button class="m-row" id="set-export">
+        <i class="fas fa-download m-row-ico"></i><span class="m-row-label">导出我的数据</span>
+        <i class="fas fa-chevron-right m-chev"></i>
+      </button>
+      <button class="m-row m-danger" id="set-delete">
+        <i class="fas fa-user-xmark m-row-ico"></i><span class="m-row-label">注销账号</span>
+        <i class="fas fa-chevron-right m-chev"></i>
+      </button>
+    </div>
+
+    <p class="m-hint" style="text-align:center;margin-top:18px">校园论坛 · 移动版设置</p>
+  </main>
+
+  <script defer src="/js/m-app.js"></script>
+  <script defer src="/js/m-settings.js"></script>
+</body>
+</html>

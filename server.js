@@ -272,6 +272,38 @@ app.use((req, res, next) => {
   createRateLimiter({ limit, window: Math.floor(windowMs / 1000), message })(req, res, next);
 });
 
+// 6.9. 移动端自动跳转：手机浏览器访问入口页时进入 App 版
+// 桌面入口（/ 、/index.html、/categories.html）在移动 UA 下 302 到 /m-* 页面；
+// 附加 ?desktop=1 可强制留在桌面版（便于在手机上调试桌面页面）。
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  if (req.query.desktop === '1') return next();
+  const ua = req.get('user-agent') || '';
+  const isMobile = /Android|iPhone|iPod|Windows Phone|HarmonyOS|Mobile/i.test(ua);
+  if (!isMobile) return next();
+  const mobileEntry = {
+    '/': '/m-index.html',
+    '/index.html': '/m-index.html',
+    '/categories.html': '/m-categories.html',
+    '/login.html': '/m-login.html',
+    '/forgot-password.html': '/m-forgot.html',
+    '/edit-simple.html': '/m-edit.html',
+    '/favorites.html': '/m-favorites.html',
+    '/following.html': '/m-following.html',
+    '/follow-list.html': '/m-follow-list.html',
+    '/category.html': '/m-category.html',
+    '/chat.html': '/m-chat.html',
+    '/profile.html': '/m-user.html',
+    '/blacklist.html': '/m-blacklist.html',
+    '/settings.html': '/m-settings.html'
+  }[req.path];
+  if (mobileEntry) {
+    const qsIndex = req.originalUrl.indexOf('?');
+    return res.redirect(302, qsIndex === -1 ? mobileEntry : mobileEntry + req.originalUrl.slice(qsIndex));
+  }
+  next();
+});
+
 // 7. 静态文件服务（带缓存控制 + 路径防护）
 app.use((req, res, next) => {
   // 阻止包含 .. 的路径遍历请求
