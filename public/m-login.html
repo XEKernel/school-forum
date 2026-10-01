@@ -57,10 +57,6 @@
     <!-- 注册 -->
     <form class="m-form" id="form-register" style="display:none" autocomplete="off" novalidate>
       <div class="m-field">
-        <label class="m-label">邮箱</label>
-        <input class="m-input" id="rg-email" type="email" placeholder="用于接收验证码">
-      </div>
-      <div class="m-field">
         <label class="m-label">QQ号</label>
         <input class="m-input" id="rg-qq" inputmode="numeric" placeholder="5-15 位数字">
       </div>
@@ -73,17 +69,12 @@
         <input class="m-input" id="rg-password" type="password" placeholder="至少 8 位，含大小写字母和数字">
       </div>
       <div class="m-field">
-        <label class="m-label">学校</label>
-        <input class="m-input" id="rg-school" list="m-schools" placeholder="输入学校名称">
-        <datalist id="m-schools"></datalist>
+        <label class="m-label">确认密码</label>
+        <input class="m-input" id="rg-password2" type="password" placeholder="再次输入密码">
       </div>
       <div class="m-field">
-        <label class="m-label">入学年份</label>
-        <select class="m-input" id="rg-year"></select>
-      </div>
-      <div class="m-field">
-        <label class="m-label">班级</label>
-        <input class="m-input" id="rg-class" placeholder="如 1班、高一(3)班" maxlength="30">
+        <label class="m-label">邮箱</label>
+        <input class="m-input" id="rg-email" type="email" placeholder="用于接收验证码">
       </div>
       <div class="m-field">
         <label class="m-label">图形验证码</label>
@@ -99,6 +90,44 @@
           <button type="button" class="m-btn m-btn-ghost m-btn-sm" id="rg-send">获取验证码</button>
         </div>
       </div>
+
+      <div class="m-form-sep">在校信息（按学校配置选择）</div>
+
+      <div class="m-field">
+        <label class="m-label">学校</label>
+        <div id="rg-school-host"><input class="m-input" id="rg-school" placeholder="输入学校名称" maxlength="50"></div>
+      </div>
+      <div class="m-field">
+        <label class="m-label">入学年份</label>
+        <div id="rg-year-host">
+          <select class="m-input" id="rg-year">
+            <option value="">请选择入学年份</option>
+          </select>
+        </div>
+      </div>
+      <div class="m-field">
+        <label class="m-label">班级</label>
+        <div id="rg-class-host">
+          <select class="m-input" id="rg-class" disabled>
+            <option value="">请先选择学校</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="m-field">
+        <label class="m-label">出生日期（可选）</label>
+        <input class="m-input" id="rg-birthday" type="date">
+      </div>
+      <div class="m-field">
+        <label class="m-label">性别（可选）</label>
+        <select class="m-input" id="rg-gender">
+          <option value="">不设置</option>
+          <option value="male">男</option>
+          <option value="female">女</option>
+          <option value="other">其他</option>
+        </select>
+      </div>
+
       <button type="submit" class="m-btn m-btn-primary m-btn-block" id="rg-submit" style="margin-top:16px">注册</button>
     </form>
 

@@ -4,9 +4,11 @@
 
   var captcha = { login: null, register: null };
   var counting = { login: false, register: false };
+  var schools = [];            // /api/schools 返回的学校配置（含 classInfo）
+  var schoolsConfigured = false;
 
   function $(id) { return document.getElementById(id); }
-  function val(id) { var el = $(id); return el ? el.value.trim() : ''; }
+  function val(id) { var el = $(id); return el ? String(el.value || '').trim() : ''; }
 
   function redirectTarget() {
     var r = new URLSearchParams(location.search).get('redirect');
@@ -71,6 +73,82 @@
     }
   }
 
+  // ---------- 学校 / 入学年份 / 班级联动（数据源：/api/schools 的 classInfo） ----------
+  function renderSchoolControl() {
+    var host = $('rg-school-host');
+    if (schoolsConfigured) {
+      host.innerHTML = '<select class="m-input" id="rg-school"><option value="">请选择学校</option>' +
+        schools.map(function (s) {
+          return '<option value="' + mApp.escape(s.name) + '">' + mApp.escape(s.name) + '</option>';
+        }).join('') + '</select>';
+    } else {
+      // 未配置学校时退化为手工输入，保证仍可注册
+      host.innerHTML = '<input class="m-input" id="rg-school" placeholder="输入学校名称" maxlength="50">';
+    }
+  }
+
+  function renderYearOptions() {
+    var years = [];
+    if (schoolsConfigured) {
+      var seen = {};
+      schools.forEach(function (s) {
+        (s.classInfo || []).forEach(function (ci) {
+          if (ci && ci.year) seen[ci.year] = 1;
+        });
+      });
+      years = Object.keys(seen).map(Number).sort(function (a, b) { return b - a; });
+    }
+    if (!years.length) {
+      var now = new Date().getFullYear();
+      for (var y = now; y >= now - 8; y--) years.push(y);
+    }
+    $('rg-year').innerHTML = '<option value="">请选择入学年份</option>' + years.map(function (y) {
+      return '<option value="' + y + '">' + y + ' 年</option>';
+    }).join('');
+  }
+
+  function renderClassControl() {
+    var host = $('rg-class-host');
+    if (!schoolsConfigured) {
+      host.innerHTML = '<input class="m-input" id="rg-class" placeholder="如 1班" maxlength="30">';
+      return;
+    }
+    var name = val('rg-school');
+    var year = parseInt(val('rg-year'), 10);
+    if (!name) {
+      host.innerHTML = '<select class="m-input" id="rg-class" disabled><option value="">请先选择学校</option></select>';
+      return;
+    }
+    if (!year) {
+      host.innerHTML = '<select class="m-input" id="rg-class" disabled><option value="">请先选择入学年份</option></select>';
+      return;
+    }
+    var school = schools.filter(function (s) { return s.name === name; })[0];
+    var info = school && (school.classInfo || []).filter(function (ci) { return ci.year === year; })[0];
+    if (!info || !info.classCount) {
+      host.innerHTML = '<select class="m-input" id="rg-class" disabled><option value="">该年份暂无班级配置</option></select>';
+      return;
+    }
+    var opts = '';
+    for (var i = 1; i <= info.classCount; i++) {
+      opts += '<option value="' + i + '班">' + i + '班</option>';
+    }
+    host.innerHTML = '<select class="m-input" id="rg-class"><option value="">请选择班级</option>' + opts + '</select>';
+  }
+
+  async function initSchoolFields() {
+    try {
+      var d = await mApp.api.get('/api/schools', { silent: true });
+      schools = (d && d.schools) || [];
+    } catch (e) {
+      schools = [];
+    }
+    schoolsConfigured = schools.length > 0;
+    renderSchoolControl();
+    renderYearOptions();
+    renderClassControl();
+  }
+
   // ---------- 登录 / 注册提交 ----------
   async function doLogin(e) {
     e.preventDefault();
@@ -107,23 +185,27 @@
   async function doRegister(e) {
     e.preventDefault();
     var payload = {
-      email: val('rg-email'),
       qq: val('rg-qq'),
       username: val('rg-username'),
       password: val('rg-password'),
+      email: val('rg-email'),
+      verificationCode: val('rg-code'),
       school: val('rg-school'),
       enrollmentYear: val('rg-year'),
       className: val('rg-class'),
-      verificationCode: val('rg-code')
+      birthday: val('rg-birthday'),
+      gender: val('rg-gender')
     };
 
-    if (!payload.email) return mApp.toast('请输入邮箱', 'warning');
     if (!payload.qq) return mApp.toast('请输入QQ号', 'warning');
     if (!payload.username) return mApp.toast('请输入用户名', 'warning');
     if (!payload.password) return mApp.toast('请输入密码', 'warning');
-    if (!payload.school) return mApp.toast('请输入学校名称', 'warning');
-    if (!payload.className) return mApp.toast('请输入班级', 'warning');
+    if (val('rg-password2') !== payload.password) return mApp.toast('两次输入的密码不一致', 'warning');
+    if (!payload.email) return mApp.toast('请输入邮箱', 'warning');
     if (!payload.verificationCode) return mApp.toast('请输入邮箱验证码', 'warning');
+    if (!payload.school) return mApp.toast('请选择学校', 'warning');
+    if (!payload.enrollmentYear) return mApp.toast('请选择入学年份', 'warning');
+    if (!payload.className) return mApp.toast('请选择班级', 'warning');
 
     var btn = $('rg-submit');
     btn.disabled = true;
@@ -199,26 +281,21 @@
     $('form-login').addEventListener('submit', doLogin);
     $('form-register').addEventListener('submit', doRegister);
 
+    // 学校/入学年份变化 → 重算班级可选项
+    $('form-register').addEventListener('change', function (e) {
+      if (e.target && (e.target.id === 'rg-school' || e.target.id === 'rg-year')) {
+        renderClassControl();
+      }
+    });
+
     // 忘记密码
     $('lg-forgot').addEventListener('click', function () { location.href = 'm-forgot.html'; });
 
     // QQ 登录
     $('m-qq-login').addEventListener('click', qqLogin);
 
-    // 入学年份选项
-    var now = new Date().getFullYear();
-    var opts = '';
-    for (var y = now; y >= now - 8; y--) opts += '<option value="' + y + '">' + y + ' 年</option>';
-    $('rg-year').innerHTML = opts;
-    $('rg-year').value = String(now);
-
-    // 学校候选
-    mApp.api.get('/api/schools', { silent: true }).then(function (d) {
-      var list = (d && d.schools) || [];
-      $('m-schools').innerHTML = list.map(function (s) {
-        return '<option value="' + mApp.escape(s.name) + '"></option>';
-      }).join('');
-    }).catch(function () {});
+    // 学校/年份/班级（按后端配置联动）
+    initSchoolFields();
 
     // 初始验证码
     loadCaptcha('login');
