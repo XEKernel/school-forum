@@ -319,7 +319,7 @@ const chatManager = {
   // 检查发送权限
   checkSendPermission: async function(senderId, receiverId) {
     try {
-      const response = await fetch(`/api/blacklist/check/${receiverId}`, {
+      const response = await fetch(`/api/check/${receiverId}`, {
         headers: userManager.getAuthHeaders()
       });
       const data = await response.json();
@@ -738,7 +738,7 @@ const chatManager = {
     }
 
     try {
-      const response = await fetch(`/api/following/${currentUser.id}`, {
+      const response = await fetch(`/api/messages/contactable-users?userId=${currentUser.id}`, {
         headers: userManager.getAuthHeaders()
       });
       const data = await response.json();
@@ -839,7 +839,7 @@ const chatManager = {
     
     try {
       // 修复：之前未指定 method（默认 GET，body 无效导致删除不生效）
-      const response = await fetch(`/api/messages/${conversationId}`, {
+      const response = await fetch(`/api/conversations/${conversationId}`, {
         method: 'DELETE',
         headers: userManager.getAuthHeaders(),
         body: JSON.stringify({ userId: currentUser.id })
