@@ -225,7 +225,7 @@ exports.createCategory = async (req, res) => {
       name: name.trim(),
       description: description || '',
       icon: icon || 'fa-folder',
-      color: color || '#4361ee',
+      color: color || '#2b6cb0',
       order: parseInt(order) || 0,
       createdBy: adminId
     });

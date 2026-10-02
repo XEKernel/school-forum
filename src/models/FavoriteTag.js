@@ -15,7 +15,7 @@ const FavoriteTagSchema = new Schema({
   },
   color: {
     type: String,
-    default: '#4361ee',
+    default: '#2b6cb0',
     validate: {
       validator: function(v) {
         return /^#[0-9A-Fa-f]{6}$/.test(v);
@@ -40,7 +40,7 @@ const FavoriteTagSchema = new Schema({
 FavoriteTagSchema.index({ userId: 1, name: 1 }, { unique: true });
 
 // 静态方法：创建标签
-FavoriteTagSchema.statics.createTag = async function(userId, name, color = '#4361ee') {
+FavoriteTagSchema.statics.createTag = async function(userId, name, color = '#2b6cb0') {
   try {
     // 获取当前用户的最大 order 值
     const maxOrder = await this.findOne({ userId }).sort({ order: -1 }).select('order');

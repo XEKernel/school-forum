@@ -37,7 +37,7 @@ const CategorySchema = new Schema({
   // 颜色（十六进制）
   color: {
     type: String,
-    default: '#4361ee',
+    default: '#2b6cb0',
     validate: {
       validator: function(v) {
         return /^#[0-9A-Fa-f]{6}$/.test(v);

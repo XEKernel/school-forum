@@ -304,7 +304,7 @@ const favoriteController = {
         return res.status(400).json(generateErrorResponse('标签名不能为空'));
       }
 
-      const result = await FavoriteTag.createTag(userId, name.trim(), color || '#4361ee');
+      const result = await FavoriteTag.createTag(userId, name.trim(), color || '#2b6cb0');
       
       if (!result.success) {
         return res.status(400).json(generateErrorResponse(result.message));
