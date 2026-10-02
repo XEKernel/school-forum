@@ -392,6 +392,11 @@ img {
   color: var(--m-text-3);
 }
 
+/* 可点击头像（进入 TA 的主页） */
+.m-avatar[data-avatar] {
+  cursor: pointer;
+}
+
 .m-post-who {
   flex: 1;
   min-width: 0;

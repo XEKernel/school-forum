@@ -20,9 +20,10 @@
 
     var avatar = post.anonymous
       ? '<div class="m-avatar m-anon">匿</div>'
-      : '<div class="m-avatar"' + (post.userAvatar
-          ? ' style="background-image:url(\'' + esc(post.userAvatar) + '\')"'
-          : '') + '>' + (post.userAvatar ? '' : esc((post.className || '?').slice(0, 1))) + '</div>';
+      : '<div class="m-avatar" data-avatar="' + esc(post.userId || '') + '" title="查看 TA 的主页"' +
+          (post.userAvatar
+            ? ' style="background-image:url(\'' + esc(post.userAvatar) + '\')"'
+            : '') + '>' + (post.userAvatar ? '' : esc((post.className || '?').slice(0, 1))) + '</div>';
 
     return '<article class="m-detail" data-id="' + esc(post.id) + '">' +
       '<div class="m-post-head">' + avatar +
@@ -53,9 +54,10 @@
     var liked = !!(me && c.likedBy && c.likedBy.indexOf(me.id) > -1);
     var avatar = c.anonymous
       ? '<div class="m-avatar m-anon">匿</div>'
-      : '<div class="m-avatar"' + (c.userAvatar
-          ? ' style="background-image:url(\'' + esc(c.userAvatar) + '\')"'
-          : '') + '>' + (c.userAvatar ? '' : esc(name.slice(0, 1))) + '</div>';
+      : '<div class="m-avatar" data-avatar="' + esc(c.userId || '') + '" title="查看 TA 的主页"' +
+          (c.userAvatar
+            ? ' style="background-image:url(\'' + esc(c.userAvatar) + '\')"'
+            : '') + '>' + (c.userAvatar ? '' : esc(name.slice(0, 1))) + '</div>';
 
     var replies = (c.replies || []).map(function (r) { return commentHtml(r, depth + 1); }).join('');
 
@@ -169,6 +171,18 @@
 
     // 帖子与评论的点赞/收藏/回复
     document.getElementById('m-content').addEventListener('click', async function (e) {
+      // 点头像（帖子作者或评论者）→ 进入其主页
+      var av = e.target.closest('[data-avatar]');
+      if (av) {
+        var auid = av.getAttribute('data-avatar');
+        if (auid) {
+          e.preventDefault();
+          e.stopPropagation();
+          location.href = 'm-user.html?id=' + encodeURIComponent(auid);
+          return;
+        }
+      }
+
       var img = e.target.closest('[data-view]');
       if (img) { mApp.openImage(img.getAttribute('data-view')); return; }
 
