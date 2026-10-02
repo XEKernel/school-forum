@@ -391,6 +391,11 @@ const userController = {
         return res.status(400).json(generateErrorResponse('班级格式不正确：1-30个字符，不能包含 < > " \' ` \\ 等特殊字符'));
       }
 
+      // 性别枚举校验（防止非法值直撞 Mongoose 枚举约束，最终返回 500）
+      if (gender && !['male', 'female', 'other'].includes(gender)) {
+        return res.status(400).json(generateErrorResponse('性别取值不正确'));
+      }
+
       // 验证邮箱
       if (!email) {
         return res.status(400).json(generateErrorResponse('邮箱不能为空'));
@@ -474,7 +479,7 @@ const userController = {
       });
 
       // 生成登录 Token
-      const { generateAccessToken, generateRefreshToken, setAuthCookies } = require('../middleware/jwtAuth');
+      const { generateAccessToken, generateRefreshToken, setAuthCookies, isApiClient } = require('../middleware/jwtAuth');
       const accessToken = generateAccessToken(newUser.id);
       const refreshToken = generateRefreshToken(newUser.id);
 
@@ -486,8 +491,8 @@ const userController = {
 
       res.status(201).json(generateSuccessResponse({ 
         user: safeUser,
-        accessToken,
-        refreshToken
+        // 令牌仅返回给原生客户端（安卓 App）；浏览器侧只走 HttpOnly Cookie
+        ...(isApiClient(req) ? { accessToken, refreshToken } : {})
       }, '注册成功'));
     } catch (error) {
       // 唯一索引冲突（并发注册同名/同QQ/同邮箱）：由数据库兜底，转成可读的 400
@@ -734,9 +739,6 @@ const userController = {
       const responseData = {
         user: safeUser,
         isAdmin: isAdmin,
-        // JWT Token
-        token: accessToken,
-        refreshToken: refreshToken,
         // 新设备登录检测结果（前端用于安全提示）
         isNewDevice: isNewDevice,
         device: isNewDevice ? {
@@ -749,14 +751,16 @@ const userController = {
         } : null
       };
 
-      // 管理员返回额外 Token
-      if (isAdmin) {
-        responseData.adminToken = adminToken;
-      }
-
       // 下发 HttpOnly Cookie：access/refresh（管理员再加 admin）
-      const { setAuthCookies } = require('../middleware/jwtAuth');
+      const { setAuthCookies, isApiClient } = require('../middleware/jwtAuth');
       setAuthCookies(req, res, { accessToken, refreshToken, adminToken });
+
+      // 令牌仅返回给原生客户端（安卓 App）；浏览器侧只走 HttpOnly Cookie
+      if (isApiClient(req)) {
+        responseData.token = accessToken;
+        responseData.refreshToken = refreshToken;
+        if (isAdmin) responseData.adminToken = adminToken;
+      }
 
       res.json(generateSuccessResponse(responseData, isAdmin ? '管理员登录成功' : '登录成功'));
     } catch (error) {
@@ -1375,11 +1379,14 @@ const userController = {
       });
 
       // 刷新成功后同步更新 Cookie 里的 access token（浏览器端无需自行存储）
+      const { isApiClient } = require('../middleware/jwtAuth');
       setAuthCookies(req, res, { accessToken: newAccessToken });
 
-      res.json(generateSuccessResponse({
-        token: newAccessToken
-      }, '令牌刷新成功'));
+      // 仅原生客户端从响应体取新令牌；浏览器侧已通过 Cookie 更新
+      res.json(generateSuccessResponse(
+        isApiClient(req) ? { token: newAccessToken } : {},
+        '令牌刷新成功'
+      ));
     } catch (error) {
       logger.logError('刷新令牌失败', { error: error.message });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
@@ -2150,6 +2157,7 @@ const userController = {
         const payload = await buildAuthPayload(existing, req, res);
         session.profile = profile;
         session.result = { needProfile: false, ...payload.responseData };
+        session.tokens = payload.tokens; // 暂存令牌，供 getQqResult 下发 Cookie（响应体不下发）
       } else {
         // 新用户：预注册，前端补全资料
         session.profile = profile;
@@ -2176,14 +2184,10 @@ const userController = {
       const profile = session.profile || {};
 
       // QQ 登录成功时同样下发 HttpOnly Cookie（前端从这个接口拿结果，是浏览器侧的主路径）
-      const qqResult = session.result || null;
-      if (session.type === 'login' && qqResult && qqResult.token) {
+      // 令牌存放在 session.tokens，不放进响应体（浏览器侧不下发明文令牌）
+      if (session.type === 'login' && session.tokens) {
         const { setAuthCookies } = require('../middleware/jwtAuth');
-        setAuthCookies(req, res, {
-          accessToken: qqResult.token,
-          refreshToken: qqResult.refreshToken,
-          adminToken: qqResult.adminToken
-        });
+        setAuthCookies(req, res, session.tokens);
       }
 
       res.json(generateSuccessResponse({
@@ -2568,7 +2572,8 @@ async function buildAuthPayload(user, req, res) {
     generateAccessToken,
     generateRefreshToken,
     generateAdminToken,
-    setAuthCookies
+    setAuthCookies,
+    isApiClient
   } = require('../middleware/jwtAuth');
 
   // 管理员判定（role 优先，其次 UUID 白名单；不再使用可被改绑的 qq 判据）
@@ -2655,8 +2660,6 @@ async function buildAuthPayload(user, req, res) {
   const responseData = {
     user: safeUser,
     isAdmin,
-    token: accessToken,
-    refreshToken,
     isNewDevice,
     device: isNewDevice ? {
       source: uaInfo.source,
@@ -2667,9 +2670,15 @@ async function buildAuthPayload(user, req, res) {
       time: nowIso
     } : null
   };
-  if (isAdmin) responseData.adminToken = adminToken;
+  // 令牌仅返回给原生客户端；浏览器（含 QQ 登录页）只走 HttpOnly Cookie
+  if (isApiClient(req)) {
+    responseData.token = accessToken;
+    responseData.refreshToken = refreshToken;
+    if (isAdmin) responseData.adminToken = adminToken;
+  }
 
-  return { responseData };
+  // tokens 单独返回：QQ 回调把令牌暂存服务端会话，供 getQqResult 下发 Cookie
+  return { responseData, tokens: { accessToken, refreshToken, adminToken } };
 }
 
 module.exports = userController;

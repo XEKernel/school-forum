@@ -132,6 +132,24 @@ function isHttpsRequest(req) {
 }
 
 /**
+ * 是否为需要从响应体读取令牌的 API 客户端（安卓原生 App 等）
+ *
+ * 安全背景：令牌主通道是 HttpOnly Cookie。若浏览器侧响应体也返回明文令牌，
+ * 一旦页面存在 XSS，即可用 Cookie 换一份明文令牌外传（绕过 HttpOnly）。
+ * 因此令牌只返回给无法持有 Cookie 的原生客户端：
+ *   - OkHttp（安卓 App）默认 UA 形如 `okhttp/4.12.0`
+ *   - 或显式声明 `X-Client: app`
+ * 浏览器（含移动网页版）一律走 Cookie，响应体不带令牌。
+ * @param {object} req
+ * @returns {boolean}
+ */
+function isApiClient(req) {
+  const ua = req.get('user-agent') || '';
+  if (/okhttp\//i.test(ua)) return true;
+  return String(req.get('x-client') || '').toLowerCase() === 'app';
+}
+
+/**
  * 下发认证 Cookie（登录 / 注册 / QQ 登录 / 刷新令牌成功时调用）
  * @param {object} req
  * @param {object} res
@@ -622,6 +640,7 @@ module.exports = {
   extractToken,
   setAuthCookies,
   clearAuthCookies,
+  isApiClient,
   AUTH_COOKIES,
   authenticateUser,
   authenticateAdmin,

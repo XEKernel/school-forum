@@ -2,7 +2,7 @@
  * QQ 授权回调处理页
  * 流程：QQ 授权 → 服务端 /api/auth/qq/callback 处理 → 302 到本页 ?state=xxx
  * 本页读取 state → GET /api/auth/qq/result 获取最终结果：
- *   - 登录成功（needProfile=false）→ 存 token 跳首页
+ *   - 登录成功（needProfile=false）→ 存用户信息跳首页（令牌走 HttpOnly Cookie）
  *   - 新用户（needProfile=true）→ 跳 qq-register.html 补全资料
  *   - 绑定场景（type=bind）→ 显示绑定结果
  *   - error 参数 → 显示错误
@@ -94,7 +94,8 @@
       }
 
       // ===== 登录成功 =====
-      if (result.user && result.token) {
+      // 令牌由服务端写入 HttpOnly Cookie，响应体只有用户信息
+      if (result.user) {
         saveAuth(result);
         // 新设备提示走站内消息，不弹窗
         window.location.href = 'index.html';
