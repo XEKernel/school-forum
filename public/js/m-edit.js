@@ -103,7 +103,7 @@
       }
       $('m-title').textContent = '编辑帖子';
       $('m-submit').textContent = '保存';
-      $('m-content').value = post.content || '';
+      $('m-editor-input').value = post.content || '';
       // 编辑接口不支持改匿名/栏目外的字段：匿名开关仅新建时可用
       $('m-anon-row').style.display = 'none';
       existing = (post.images || []).map(function (im) {
@@ -123,7 +123,7 @@
       location.href = 'm-login.html?redirect=' + encodeURIComponent(location.pathname + location.search);
       return;
     }
-    var content = $('m-content').value.trim();
+    var content = $('m-editor-input').value.trim();
     if (!content && picked.length === 0 && existing.length === 0) {
       mApp.toast('请输入内容或添加图片', 'warning');
       return;
@@ -169,7 +169,7 @@
   // ---------- 初始化 ----------
   document.addEventListener('DOMContentLoaded', async function () {
     $('m-back').addEventListener('click', function () {
-      if (picked.length || $('m-content').value.trim() || deleted.length) {
+      if (picked.length || $('m-editor-input').value.trim() || deleted.length) {
         if (!confirm('放弃未保存的内容？')) return;
       }
       if (history.length > 1) history.back();

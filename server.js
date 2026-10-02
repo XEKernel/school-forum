@@ -253,7 +253,7 @@ app.use((req, res, next) => {
     message = '发帖过于频繁，请稍后再试';
   } else if (path.includes('/comments')) {
     // 评论：中等限流
-    limit = sec.rateLimitComment || 20;
+    limit = sec.rateLimitComment || 30;
     windowMs = (sec.rateLimitCommentWindow || 60) * 1000;
     message = '评论过于频繁，请稍后再试';
   } else if ((req.method === 'GET' || req.method === 'HEAD') && path.startsWith('/api/') && !path.includes('/export-data')) {
@@ -280,6 +280,9 @@ app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   if (req.query.desktop === '1') return next();
   const ua = req.get('user-agent') || '';
+  // 安卓 App 内 WebView（UA 末尾带 SchoolForumApp/1.0）保持桌面版：
+  // 其内置 JS 桥（文件上传等）依赖桌面页 DOM，切到 m-* 会失效
+  if (/SchoolForumApp\//i.test(ua)) return next();
   const isMobile = /Android|iPhone|iPod|Windows Phone|HarmonyOS|Mobile/i.test(ua);
   if (!isMobile) return next();
   const mobileEntry = {
@@ -296,7 +299,9 @@ app.use((req, res, next) => {
     '/chat.html': '/m-chat.html',
     '/profile.html': '/m-user.html',
     '/blacklist.html': '/m-blacklist.html',
-    '/settings.html': '/m-settings.html'
+    '/settings.html': '/m-settings.html',
+    '/message.html': '/m-messages.html',
+    '/post-detail.html': '/m-post.html'
   }[req.path];
   if (mobileEntry) {
     const qsIndex = req.originalUrl.indexOf('?');
