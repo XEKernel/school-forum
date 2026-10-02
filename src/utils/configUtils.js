@@ -105,6 +105,7 @@ const DEFAULT_CONFIG = {
     // 频率限制
     rateLimitEnabled: true,             // 启用接口限流
     rateLimitGeneral: 100,              // 通用API（次/分钟）
+    rateLimitRead: 600,                 // 只读GET接口（次/分钟）
     rateLimitLogin: 5,                  // 登录（次/分钟）
     rateLimitPost: 10,                  // 发帖（次/分钟）
     rateLimitComment: 30,               // 评论（次/分钟）
@@ -294,6 +295,7 @@ function mergeWithDefaults(config) {
       corsExtraOrigins: config.security?.corsExtraOrigins || DEFAULT_CONFIG.security.corsExtraOrigins,
       rateLimitEnabled: config.security?.rateLimitEnabled ?? DEFAULT_CONFIG.security.rateLimitEnabled,
       rateLimitGeneral: config.security?.rateLimitGeneral ?? DEFAULT_CONFIG.security.rateLimitGeneral,
+      rateLimitRead: config.security?.rateLimitRead ?? DEFAULT_CONFIG.security.rateLimitRead,
       rateLimitLogin: config.security?.rateLimitLogin ?? DEFAULT_CONFIG.security.rateLimitLogin,
       rateLimitPost: config.security?.rateLimitPost ?? DEFAULT_CONFIG.security.rateLimitPost,
       rateLimitComment: config.security?.rateLimitComment ?? DEFAULT_CONFIG.security.rateLimitComment,
