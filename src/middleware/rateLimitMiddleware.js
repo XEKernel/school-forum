@@ -27,7 +27,11 @@ function createRateLimiter(options = {}) {
       // 生成限流key
       const ip = req.ip || req.connection.remoteAddress || 'unknown';
       // 关键：endpoint 只取路径（不含查询字符串），否则攻击者加 ?x=1 即可绕过限流
-      const endpoint = keyGenerator ? keyGenerator(req) : (req.path || req.url).split('?')[0];
+      // 规范化：Express 路由大小写不敏感、忽略尾斜杠，
+      // 若 key 直接用原始 path，/api/Login、/api/login/ 会各开一个计数桶，
+      // 登录与验证码接口的 5 次/分钟形同虚设。
+      const rawEndpoint = keyGenerator ? keyGenerator(req) : (req.path || req.url).split('?')[0];
+      const endpoint = String(rawEndpoint || '').toLowerCase().replace(/\/+$/, '');
       
       // 检查是否超过限制
       const result = await rateLimiter.check(ip, endpoint, limit, window);

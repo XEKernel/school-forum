@@ -496,11 +496,9 @@ const messageController = {
    */
   async getContactableUsers(req, res) {
     try {
-      const { userId } = req.query;
-
-      if (!userId) {
-        return res.status(400).json(generateErrorResponse('用户ID不能为空'));
-      }
+      // 身份只认 JWT：此前取 req.query.userId，任意登录用户传别人的 UUID
+      // 就能拿到对方的完整关注/粉丝列表（社交关系枚举）。
+      const userId = req.user.id;
 
       // 获取关注的人
       const following = await Follow.find({ followerId: userId }).lean();

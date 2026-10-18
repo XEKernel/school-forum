@@ -30,7 +30,10 @@ function xssFilter(req, res, next) {
     for (const key in obj) {
       if (Object.prototype.hasOwnProperty.call(obj, key)) {
         // 过滤敏感字段（不进行 XSS 过滤，保持原值）
-        if (SENSITIVE_FIELDS.includes(key.toLowerCase())) {
+        // 列表里混有 camelCase（newPassword / accessToken 等），
+        // 单靠 key.toLowerCase() 与 includes 比对永远不命中，
+        // 导致改密接口的 newPassword 仍被 xss() 处理 —— 含 < > 的密码会被静默改写。
+        if (SENSITIVE_FIELDS.some(f => f.toLowerCase() === key.toLowerCase())) {
           filtered[key] = obj[key];
         } else {
           filtered[key] = filterXss(obj[key]);

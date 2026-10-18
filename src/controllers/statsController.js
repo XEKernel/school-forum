@@ -70,11 +70,26 @@ const statsController = {
       const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || paginationConfig.defaultLimit));
       
       if (type === 'posts') {
+        // 可见性过滤：此前只有 isDeleted + content，未登录也能搜到
+        // visibility='self' / 'followers' 的帖子全文与作者 UUID。
+        // 口径与 postController.getPosts 保持一致。
+        const viewerId = req.user && req.user.id ? req.user.id : null;
         const query = { isDeleted: false, content: new RegExp(escapeRegex(q), 'i') };
-        const [results, total] = await Promise.all([
+
+        const visibleClauses = [{ visibility: 'public' }, { visibility: { $exists: false } }];
+        if (viewerId) visibleClauses.push({ userId: viewerId });
+        query.$or = visibleClauses;
+
+        const [rawPosts, total] = await Promise.all([
           Post.find(query).sort({ timestamp: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
           Post.countDocuments(query)
         ]);
+
+        // PII 脱敏：未登录用户隐藏学校/年级/班级与点赞者 UUID 列表
+        const results = rawPosts.map(p => {
+          if (viewerId) return p;
+          return { ...p, school: '', grade: '', className: '', likedBy: [], dislikedBy: [] };
+        });
 
         res.json(generateSuccessResponse({
           results,
@@ -87,11 +102,18 @@ const statsController = {
           User.find(query).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
           User.countDocuments(query)
         ]);
-        const results = users.map(user => {
-          // 只返回非敏感字段（绝不泄露 email/qq/birthday 等 PII）
-          const { password, email, qq, birthday, _id, __v, ...safeUser } = user;
-          return safeUser;
-        });
+        // 改为白名单：此前是「剔除 6 个字段」，导致 loginDevices（最近 10 次登录的
+        // IP + 设备指纹）、role（管理员身份）、settings、lastLogin、passwordChangedAt
+        // 全部随搜索结果公开，未登录即可按用户名枚举。
+        const results = users.map(user => ({
+          id: user.id,
+          username: user.username,
+          avatar: user.avatar || null,
+          school: user.school || '',
+          grade: user.grade || '',
+          className: user.className || '',
+          createdAt: user.createdAt
+        }));
 
         res.json(generateSuccessResponse({
           results,
