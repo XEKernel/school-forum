@@ -75,8 +75,11 @@
 
     const iconEl = document.getElementById('category-icon');
     if (iconEl) {
-      iconEl.innerHTML = `<i class="fas ${category.icon || 'fa-folder'}" style="color: ${category.color || '#2b6cb0'}"></i>`;
-      iconEl.style.background = `${category.color || '#2b6cb0'}22`;
+      // 纵深防御：即使后端校验被绕过，也不让非法值进入 HTML 属性
+      const safeIcon = /^[a-z0-9\s-]{1,60}$/i.test(String(category.icon || '')) ? category.icon : 'fa-folder';
+      const safeColor = /^#[0-9a-f]{3,8}$/i.test(String(category.color || '')) ? category.color : '#2b6cb0';
+      iconEl.innerHTML = `<i class="fas ${safeIcon}" style="color: ${safeColor}"></i>`;
+      iconEl.style.background = `${safeColor}22`;
     }
 
     // 已登录用户显示申请按钮

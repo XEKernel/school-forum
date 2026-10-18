@@ -204,6 +204,21 @@ exports.getAllCategories = async (req, res) => {
   }
 };
 
+/**
+ * 栏目图标 / 主题色的格式校验。
+ *
+ * 这两个字段会被前端直接拼进 HTML 属性（class 与 style），历史上没有任何校验：
+ * 管理员若填入 `"><img src=x onerror=...>` 即可在所有访问栏目页的用户浏览器里执行脚本。
+ * 从落库处做白名单校验，比在每个渲染点分别防御更彻底。
+ */
+function isValidCategoryIcon(v) {
+  return /^[a-z0-9\s-]{1,60}$/i.test(String(v || ''));
+}
+
+function isValidCategoryColor(v) {
+  return /^#[0-9a-f]{3,8}$/i.test(String(v || ''));
+}
+
 // 创建栏目
 exports.createCategory = async (req, res) => {
   try {
@@ -218,6 +233,14 @@ exports.createCategory = async (req, res) => {
     const exists = await Category.findOne({ name: name.trim() });
     if (exists) {
       return res.status(400).json(generateErrorResponse('该栏目名称已存在'));
+    }
+
+    // 图标与主题色会直接进入 HTML 属性，必须白名单校验
+    if (icon && !isValidCategoryIcon(icon)) {
+      return res.status(400).json(generateErrorResponse('图标格式不正确：应为 fa- 开头的 FontAwesome 类名'));
+    }
+    if (color && !isValidCategoryColor(color)) {
+      return res.status(400).json(generateErrorResponse('颜色格式不正确：应为 #RRGGBB 或 #RGB'));
     }
 
     const category = await Category.create({
@@ -252,8 +275,18 @@ exports.updateCategory = async (req, res) => {
 
     if (name !== undefined) category.name = name.trim();
     if (description !== undefined) category.description = description;
-    if (icon !== undefined) category.icon = icon;
-    if (color !== undefined) category.color = color;
+    if (icon !== undefined) {
+      if (!isValidCategoryIcon(icon)) {
+        return res.status(400).json(generateErrorResponse('图标格式不正确：应为 fa- 开头的 FontAwesome 类名'));
+      }
+      category.icon = icon;
+    }
+    if (color !== undefined) {
+      if (!isValidCategoryColor(color)) {
+        return res.status(400).json(generateErrorResponse('颜色格式不正确：应为 #RRGGBB 或 #RGB'));
+      }
+      category.color = color;
+    }
     if (order !== undefined) category.order = parseInt(order);
     if (isActive !== undefined) category.isActive = isActive;
 

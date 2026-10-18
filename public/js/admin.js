@@ -3978,12 +3978,15 @@ confirmDeletePost: async function() {
         container.innerHTML = categories.map(category => {
             const statusClass = category.isActive ? 'status-active' : 'status-inactive';
             const totalPosts = category.postCount || 0;
+            // 纵深防御：icon/color 会进入 class 与 style 属性，非法值回退默认
+            const safeIcon = /^[a-z0-9\s-]{1,60}$/i.test(String(category.icon || '')) ? category.icon : 'fa-folder';
+            const safeColor = /^#[0-9a-f]{3,8}$/i.test(String(category.color || '')) ? category.color : '#2b6cb0';
             
             return `
                 <div class="announcement-card ${statusClass}">
                     <div class="announcement-header">
                         <div class="announcement-title">
-                            <i class="${category.icon || 'fa-folder'}" style="color: ${category.color || '#2b6cb0'}; margin-right: 8px;"></i>
+                            <i class="${safeIcon}" style="color: ${safeColor}; margin-right: 8px;"></i>
                             <span>${this.escapeHtml(category.name)}</span>
                         </div>
                         <div class="announcement-badges">
