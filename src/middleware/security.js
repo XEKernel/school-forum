@@ -10,54 +10,64 @@ const logger = require('../utils/logger');
  * XSS 过滤中间件
  * 自动过滤请求体中的 XSS 攻击代码
  */
+/**
+ * 递归净化任意值（字符串走 xss 白名单，对象/数组递归）。
+ *
+ * 提到模块级是为了让 multipart 上传后的 body 也能复用同一套规则：
+ * multer 在路由层才解析表单，全局 xssFilter 运行时 req.body 还是 undefined，
+ * 所有「带图发帖 / 评论 / 私信」的文本字段此前完全绕过 XSS 过滤。
+ */
+function sanitizeValue(obj) {
+  if (!obj || typeof obj !== 'object') {
+    if (typeof obj === 'string') {
+      return xss(obj, XSS_CONFIG);
+    }
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeValue(item));
+  }
+
+  const filtered = {};
+  for (const key in obj) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      // 敏感字段原样保留（不净化）：列表里混有 camelCase（newPassword / accessToken 等），
+      // 单靠 key.toLowerCase() 与 includes 比对永远不命中，故逐个转小写比较。
+      if (SENSITIVE_FIELDS.some(f => f.toLowerCase() === key.toLowerCase())) {
+        filtered[key] = obj[key];
+      } else {
+        filtered[key] = sanitizeValue(obj[key]);
+      }
+    }
+  }
+  return filtered;
+}
+
+/**
+ * 净化一个请求体对象（供上传中间件在 multer 解析完成后调用）。
+ * @param {object} body
+ * @returns {object}
+ */
+function sanitizeBody(body) {
+  if (!body || typeof body !== 'object') return body;
+  return sanitizeValue(body);
+}
+
+/**
+ * XSS 过滤中间件
+ * 自动过滤请求体 / 查询参数 / 路由参数中的 XSS 攻击代码
+ */
 function xssFilter(req, res, next) {
-  /**
-   * 递归过滤对象中的 XSS
-   */
-  function filterXss(obj) {
-    if (!obj || typeof obj !== 'object') {
-      if (typeof obj === 'string') {
-        return xss(obj, XSS_CONFIG);
-      }
-      return obj;
-    }
-
-    if (Array.isArray(obj)) {
-      return obj.map(item => filterXss(item));
-    }
-
-    const filtered = {};
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        // 过滤敏感字段（不进行 XSS 过滤，保持原值）
-        // 列表里混有 camelCase（newPassword / accessToken 等），
-        // 单靠 key.toLowerCase() 与 includes 比对永远不命中，
-        // 导致改密接口的 newPassword 仍被 xss() 处理 —— 含 < > 的密码会被静默改写。
-        if (SENSITIVE_FIELDS.some(f => f.toLowerCase() === key.toLowerCase())) {
-          filtered[key] = obj[key];
-        } else {
-          filtered[key] = filterXss(obj[key]);
-        }
-      }
-    }
-    return filtered;
-  }
-
-  // 过滤请求体
   if (req.body && typeof req.body === 'object') {
-    req.body = filterXss(req.body);
+    req.body = sanitizeValue(req.body);
   }
-
-  // 过滤查询参数
   if (req.query && typeof req.query === 'object') {
-    req.query = filterXss(req.query);
+    req.query = sanitizeValue(req.query);
   }
-
-  // 过滤路由参数
   if (req.params && typeof req.params === 'object') {
-    req.params = filterXss(req.params);
+    req.params = sanitizeValue(req.params);
   }
-
   next();
 }
 
@@ -288,6 +298,7 @@ function secureErrorHandler(err, req, res, next) {
 
 module.exports = {
   xssFilter,
+  sanitizeBody,
   requestIdMiddleware,
   sanitizeLogData,
   injectionGuard,

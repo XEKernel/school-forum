@@ -1430,6 +1430,38 @@ const sessionCache = {
 /**
  * 接口限流
  */
+// 进程内限流计数兜底：Redis 不可用（宕机 / 未启用 / 超时）时使用。
+// 此前 check() 在 !isConnected 与 catch 两处都直接 allowed:true，
+// 等于限流整体失效 —— 登录可无限试密码、验证码接口可无限触发邮件。
+// 单进程有效（多实例各算各的），但远比完全放开安全。
+const _memoryRateBuckets = new Map();
+
+function memoryRateCheck(ip, endpoint, limit, window) {
+  const key = `${ip}|${endpoint}`;
+  const now = Date.now();
+  const winMs = Math.max(1, Number(window) || 60) * 1000;
+
+  let bucket = _memoryRateBuckets.get(key);
+  if (!bucket || now - bucket.start >= winMs) {
+    bucket = { start: now, count: 0 };
+    _memoryRateBuckets.set(key, bucket);
+  }
+  bucket.count += 1;
+
+  // 防止 Map 无限增长：超过阈值时清掉已过期的桶
+  if (_memoryRateBuckets.size > 20000) {
+    for (const [k, v] of _memoryRateBuckets) {
+      if (now - v.start >= winMs) _memoryRateBuckets.delete(k);
+    }
+  }
+
+  return {
+    allowed: bucket.count <= limit,
+    remaining: Math.max(0, limit - bucket.count),
+    resetTime: bucket.start + winMs
+  };
+}
+
 const rateLimiter = {
   PREFIX: 'rate:',
   
@@ -1446,7 +1478,8 @@ const rateLimiter = {
    * @returns {object} { allowed: boolean, remaining: number, resetTime: number }
    */
   async check(ip, endpoint, limit = 100, window = 60) {
-    if (!isConnected) return { allowed: true, remaining: limit, resetTime: 0 };
+    // Redis 不可用：改用进程内计数兜底（此前直接放行，等于全站不限流）
+    if (!isConnected) return memoryRateCheck(ip, endpoint, limit, window);
     
     try {
       const client = getRedisClient();
@@ -1472,8 +1505,8 @@ const rateLimiter = {
       await client.incr(key);
       return { allowed: true, remaining: limit - count - 1, resetTime: Date.now() + window * 1000 };
     } catch (error) {
-      // 出错时允许请求
-      return { allowed: true, remaining: limit, resetTime: 0 };
+      // 出错（超时 / 连接中断）同样走内存兜底，而不是直接放行
+      return memoryRateCheck(ip, endpoint, limit, window);
     }
   },
 

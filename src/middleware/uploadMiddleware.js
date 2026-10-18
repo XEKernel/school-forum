@@ -1,4 +1,5 @@
 const multer = require('multer');
+const { sanitizeBody } = require('./security');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
@@ -66,7 +67,31 @@ function createUploadMiddleware() {
 }
 
 // 创建默认的 multer 实例（向后兼容）
-const upload = createUploadMiddleware();
+const rawUpload = createUploadMiddleware();
+
+/**
+ * 上传完成后补一次 XSS 净化。
+ *
+ * 渲染顺序：全局 xssFilter 挂在路由之前，而 multipart 表单要由 multer 在路由层解析，
+ * 那时 req.body 还是 undefined，过滤被整体跳过 —— 所有带图发帖 / 评论 / 回复 / 私信
+ * 的文本字段因此完全绕过 XSS 白名单。
+ */
+function sanitizeMultipartBody(req, res, next) {
+  if (req.body && typeof req.body === 'object') {
+    req.body = sanitizeBody(req.body);
+  }
+  next();
+}
+
+// 保持 single / array / fields / none / any 的调用写法不变，
+// 但返回「multer + 净化」的中间件数组（Express 支持数组并会自动扁平化）。
+const upload = {
+  single: (name) => [rawUpload.single(name), sanitizeMultipartBody],
+  array: (name, maxCount) => [rawUpload.array(name, maxCount), sanitizeMultipartBody],
+  fields: (fields) => [rawUpload.fields(fields), sanitizeMultipartBody],
+  none: () => [rawUpload.none(), sanitizeMultipartBody],
+  any: () => [rawUpload.any(), sanitizeMultipartBody]
+};
 
 /**
  * 净化上传文件原名
@@ -174,6 +199,7 @@ async function verifyImageMagicBytes(req, res, next) {
 
 module.exports = {
   upload,
+  sanitizeMultipartBody,
   createUploadMiddleware,
   processUploadedFiles,
   verifyImageMagicBytes,

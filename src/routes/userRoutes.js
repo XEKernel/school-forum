@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
-const { upload } = require('../middleware/uploadMiddleware');
+const { upload, sanitizeMultipartBody } = require('../middleware/uploadMiddleware');
 const { authenticateUser, optionalAuth } = require('../middleware/jwtAuth');
 // 发码类接口的精确限流（server.js 的路径子串匹配覆盖不到下面 4 条：
 // '-login-' 不含 '/login'、'-change-code' 也不匹配任何子串规则）
@@ -141,7 +141,7 @@ router.put('/users/:id', authenticateUser, userController.updateUserProfile);
 // 更新用户资料路由别名（兼容 Android）
 // 挂 avatarUpload.single('avatar')：支持 multipart 提交（头像文件 + 文本字段，
 // 文本字段由 multer 合并到 req.body；非 multipart 请求 multer 自动跳过）
-router.post('/user/update-profile', authenticateUser, avatarUpload.single('avatar'), userController.updateUserProfile);
+router.post('/user/update-profile', authenticateUser, avatarUpload.single('avatar'), sanitizeMultipartBody, userController.updateUserProfile);
 
 // 更新用户设置（支持PUT和POST方法）
 router.put('/users/:id/settings', authenticateUser, userController.updateUserSettings);
@@ -159,7 +159,7 @@ router.post('/user/privacy-settings', authenticateUser, userController.updatePri
 router.post('/user/update-qq', authenticateUser, userController.changeQQ);
 
 // 上传用户头像
-router.post('/users/:id/avatar', authenticateUser, avatarUpload.single('avatar'), userController.uploadAvatar);
+router.post('/users/:id/avatar', authenticateUser, avatarUpload.single('avatar'), sanitizeMultipartBody, userController.uploadAvatar);
 
 // 删除用户头像
 router.delete('/users/:id/avatar', authenticateUser, userController.removeAvatar);
