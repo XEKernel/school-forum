@@ -193,11 +193,9 @@ function injectionGuard(req, res, next) {
  */
 function createIpBlacklistMiddleware(getBlacklistedIps) {
   return async function ipBlacklistMiddleware(req, res, next) {
-    const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || 
-                     req.headers['x-real-ip'] || 
-                     req.connection?.remoteAddress || 
-                     req.socket?.remoteAddress ||
-                     req.ip;
+    // 统一用 req.ip：它遵循 express 的 trust proxy 策略，与限流键保持一致。
+    // 直接读 x-forwarded-for 完全由客户端控制，被封禁者带一个假头即可绕过。
+    const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
 
     try {
       const blacklistedIps = await getBlacklistedIps();

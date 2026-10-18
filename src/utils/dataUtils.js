@@ -25,6 +25,10 @@ async function getUsers() {
 
 // 根据 ID 获取用户
 async function getUserById(userId) {
+  // 必须判空：{ id: undefined } 会被 Mongoose 从查询条件里剔除，退化成 findOne({})，
+  // 命中的是集合里的第一个用户（通常是最早注册者，很可能就是管理员）。
+  // 这是账号接管的原语，宁可返回 null 也不能返回「任意一个用户」。
+  if (!userId) return null;
   return await User.findOne({ id: userId }).lean();
 }
 
@@ -59,6 +63,9 @@ async function createUser(userData) {
 
 // 更新用户
 async function updateUser(userId, updateData) {
+  // 同 getUserById：userId 缺失时 findOneAndUpdate({id: undefined}) 等价于更新
+  // 集合里的第一个用户，后果是任意用户被改写。
+  if (!userId) return null;
   return await User.findOneAndUpdate(
     { id: userId },
     updateData,

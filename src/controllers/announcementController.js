@@ -125,7 +125,23 @@ exports.getAnnouncementById = async (req, res) => {
   try {
     const { id } = req.params;
     
-    const announcement = await Announcement.findById(id);
+        // 非 ObjectId 直接 404：否则 findById 抛 CastError，被 catch 成 500
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          return res.status(404).json({ success: false, message: '公告不存在' });
+        }
+
+        // 与列表接口口径一致：已禁用 / 未到生效时间 / 已过期的公告不应通过详情接口读到。
+        // 此前只有 findById，任何未登录访问者拿到 id 即可读取草稿全文。
+        const now = new Date();
+        const announcement = await Announcement.findOne({
+          _id: id,
+          isActive: true,
+          $and: [
+            { $or: [{ startTime: null }, { startTime: { $exists: false } }, { startTime: { $lte: now } }] },
+            { $or: [{ endTime: null }, { endTime: { $exists: false } }, { endTime: { $gte: now } }] }
+          ]
+        });
     
     if (!announcement) {
       return res.status(404).json({
@@ -139,7 +155,10 @@ exports.getAnnouncementById = async (req, res) => {
       const { getRedisClient } = require('../utils/redisUtils');
       const redis = getRedisClient();
       const viewKey = `announcement:view:${id}:${req.ip}`;
-      const firstView = await redis.set(viewKey, '1', 'EX', 30, 'NX');
+      // node-redis v4 的 set 只认 options 对象：传 ('EX', 30, 'NX') 时后三个参数
+      // 会被直接丢弃，实际发出的是不带过期、不带 NX 的 SET，返回值恒为 'OK' ——
+      // 去重完全失效，且 key 永不过期。
+      const firstView = await redis.set(viewKey, '1', { EX: 30, NX: true });
       if (firstView) {
         announcement.viewCount += 1;
         await announcement.save();
