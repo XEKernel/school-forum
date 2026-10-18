@@ -72,6 +72,9 @@ function verifyToken(token, isAdmin = false) {
   
   try {
     const decoded = jwt.verify(token, config.secret, {
+      // 显式限定算法（纵深防御）：jsonwebtoken@9 在 secret 为字符串时已内置拒绝非 HMAC 算法，
+      // 这里再钉死一次，避免将来升级或改用非对称密钥时出现算法混淆。
+      algorithms: ['HS256'],
       issuer: config.issuer,
       audience: config.audience
     });

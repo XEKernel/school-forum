@@ -218,7 +218,7 @@ const verificationCode = {
    * 验证验证码
    * @returns {object} { valid: boolean, message: string }
    */
-  async verify(email, code, scenario = 'default') {
+  async verify(email, code, scenario = 'default', consume = true) {
     const storedCode = await this.get(email, scenario);
     
     if (!storedCode) {
@@ -235,8 +235,10 @@ const verificationCode = {
       };
     }
     
-    // 验证成功，删除验证码
-    await this.delete(email, scenario);
+    // 验证成功：默认消费（一次性）；consume=false 时保留，供后续步骤再次校验
+    if (consume) {
+      await this.delete(email, scenario);
+    }
     
     return {
       valid: true,

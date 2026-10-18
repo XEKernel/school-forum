@@ -386,13 +386,13 @@ const sendNewDeviceLoginEmail = async (email, info = {}) => {
 };
 
 // 验证验证码（scenario 绑定用途，防止跨场景复用）
-const verifyCode = async (email, code, scenario = 'default') => {
+const verifyCode = async (email, code, scenario = 'default', consume = true) => {
   // 统一使用小写邮箱作为 key
   const normalizedEmail = email.toLowerCase();
   
   // 优先使用Redis
   if (isRedisConnected()) {
-    return await verificationCode.verify(normalizedEmail, code, scenario);
+    return await verificationCode.verify(normalizedEmail, code, scenario, consume);
   }
   
   // 备用：内存存储验证
@@ -413,8 +413,10 @@ const verifyCode = async (email, code, scenario = 'default') => {
     return { valid: false, message: '验证码错误' };
   }
   
-  // 验证成功，删除验证码
-  memoryStore.delete(`${scenario}:${normalizedEmail}`);
+  // 验证成功：默认消费（一次性）；consume=false 时保留，供后续步骤再次校验
+  if (consume) {
+    memoryStore.delete(`${scenario}:${normalizedEmail}`);
+  }
   
   return { valid: true, message: '验证码验证成功' };
 };

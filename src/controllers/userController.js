@@ -184,8 +184,10 @@ const userController = {
         return res.status(404).json(generateErrorResponse('用户不存在'));
       }
 
-      // 验证验证码
-      const codeVerification = await verifyCode(user.email, verificationCode, 'password');
+      // 验证验证码（peek：只校验不消费）。
+      // 原实现校验成功即删码，导致后续 changePassword 再校验同一个码必然失败，
+      // 前端「先验证、再改密」的两步流程 100% 卡死。真正的消费发生在 changePassword 里。
+      const codeVerification = await verifyCode(user.email, verificationCode, 'password', false);
       if (!codeVerification.valid) {
         logger.logSecurityEvent('密码修改验证码验证失败', { userId, ip: req.ip });
         return res.status(400).json(generateErrorResponse(codeVerification.message));
@@ -806,8 +808,12 @@ const userController = {
       
       // 根据隐私设置过滤用户信息（白名单制：他人仅公开字段，敏感 PII 不下发）
       // 管理员查看任意档案时与本人同等可见（后台审计需要）
-      const viewer = viewerId && !isSelf ? await User.findOne({ id: viewerId }).select('isAdmin').lean() : null;
-      const safeUser = filterUserInfoByPrivacy(user, isSelf, isFollower, !!(viewer && viewer.isAdmin));
+      // 管理员判定统一走 role / UUID 白名单：User schema 里没有 isAdmin 字段
+      // （此前 select('isAdmin') 恒为 undefined，导致管理员看他人档案被降级成访客视图）
+      const { getAdminUsers: getAdminUserIdsForView } = require('../config/constants');
+      const viewer = viewerId && !isSelf ? await User.findOne({ id: viewerId }).select('role').lean() : null;
+      const viewerIsAdmin = !!(viewer && (viewer.role === 'admin' || getAdminUserIdsForView().includes(viewerId)));
+      const safeUser = filterUserInfoByPrivacy(user, isSelf, isFollower, viewerIsAdmin);
 
       // 计算用户统计数据
       const userStats = {
@@ -857,9 +863,18 @@ const userController = {
         if (!isCurrentPasswordValid) {
           return res.status(401).json(generateErrorResponse('当前密码错误'));
         }
+
+        // 与 changePassword 保持一致：资料接口同样不能绕过密码长度策略
+        if (String(newPassword).length < 6) {
+          return res.status(400).json(generateErrorResponse('密码至少6个字符'));
+        }
         
         // 加密新密码
         updateData.password = await hashPassword(newPassword);
+        // 与 changePassword / forgotPasswordReset 保持一致：passwordChangedAt 是 jwtAuth 与
+        // refreshToken 判定「旧令牌是否失效」的唯一依据。漏写会让改密前签发的 access/refresh
+        // token 继续有效最长 30 天 —— 而改密往往正是因为怀疑凭据泄露。
+        updateData.passwordChangedAt = new Date();
       }
       
       // 更新用户名（如果提供了）
@@ -902,7 +917,19 @@ const userController = {
       
       // 更新出生日期（如果提供了）
       if (birthday !== undefined) {
-        updateData.birthday = birthday || null;
+        if (birthday) {
+          // 只接受 YYYY-MM-DD，否则 Mongoose 会抛 CastError 变成 500
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(String(birthday))) {
+            return res.status(400).json(generateErrorResponse('出生日期格式不正确，应为 YYYY-MM-DD'));
+          }
+          const d = new Date(birthday + 'T00:00:00Z');
+          if (isNaN(d.getTime())) {
+            return res.status(400).json(generateErrorResponse('出生日期不是有效日期'));
+          }
+          updateData.birthday = birthday;
+        } else {
+          updateData.birthday = null;
+        }
       }
       
       // 更新性别（如果提供了）
@@ -1236,6 +1263,8 @@ const userController = {
 
       // 更新邮箱
       const updatedUser = await updateUser(userId, { email: newEmail.toLowerCase() });
+      // 清掉用户缓存：否则 /auth/verify 会在 TTL（30 分钟）内继续返回旧邮箱
+      await userCache.delete(userId);
 
       logger.logUserAction('邮箱修改成功', userId, user.username, { 
         oldEmail: user.email, 
@@ -1295,14 +1324,14 @@ const userController = {
       // 拒绝绑定处于管理员白名单中的 QQ：
       // 管理员纳新时若把「尚未注册的 QQ」写进白名单，改绑该 QQ 即可拿到后台权限（纳新窗口期漏洞）。
       // 白名单现已落地为 UUID，这里作为纵深防御继续拦截。
-      const { getAdminUsers } = require('../config/constants');
-      if (getAdminUsers().includes(qqNumber)) {
-        logger.logSecurityEvent('QQ号修改被拒：目标QQ在管理员白名单中', { userId, qqNumber, ip: req.ip });
-        return res.status(403).json(generateErrorResponse('该QQ号已保留给管理员，无法绑定'));
-      }
+      // 注：管理员白名单已从 QQ 号改为用户 UUID，用 QQ 号比对恒为 false（永不命中），
+      // 这段死检查已移除；真正的防线是「纳新时白名单只写 UUID」这一约定。
+      // 若未来白名单重新引入 QQ 号，请在此处通过 getAdminUsers() 恢复拦截。
 
       // 更新QQ号
       await updateUser(userId, { qq: qqNumber });
+      // 清掉用户缓存：否则 /auth/verify 会在 TTL（30 分钟）内继续返回旧 QQ
+      await userCache.delete(userId);
 
       // 重新获取更新后的用户信息
       const updatedUser = await getUserById(userId);
@@ -1402,6 +1431,13 @@ const userController = {
 
       if (token) {
         await invalidateToken(token);
+      }
+
+      // 吊销 refresh token：否则登出后被盗的 refresh token 仍能持续换取新 access（最长 30 天）。
+      // token_blacklist 只在 refreshToken 接口里被检查，不写进去那次检查等于形同虚设。
+      const refreshToken = req.body?.refreshToken || extractToken(req, 'refresh');
+      if (refreshToken) {
+        await invalidateToken(refreshToken);
       }
 
       // 清掉 HttpOnly Cookie，浏览器端不需要（也无法）自行清除
@@ -1525,6 +1561,23 @@ const userController = {
       const User = require('../models/User');
 
       // 如果不保留数据，删除用户相关数据
+      // 评论是 Post 的内嵌子文档（含 userId / username），必须单独处理，
+      // 否则注销后仍会原样留在他人帖子下（隐私残留）。
+      if (keepPosts) {
+        // 保留帖子：把该用户在所有帖子里的评论匿名化（内容保留、身份抹除）
+        await Post.updateMany(
+          { 'comments.userId': userId },
+          { $set: { 'comments.$[c].userId': 'deleted_' + userId, 'comments.$[c].username': '已注销用户' } },
+          { arrayFilters: [{ 'c.userId': userId }] }
+        );
+      } else {
+        // 不保留：从所有帖子里彻底移除该用户的评论与点赞关系
+        await Post.updateMany(
+          { $or: [{ 'comments.userId': userId }, { likedBy: userId }, { dislikedBy: userId }] },
+          { $pull: { comments: { userId }, likedBy: userId, dislikedBy: userId } }
+        );
+      }
+
       if (!keepPosts) {
         // 删除用户的所有帖子
         await Post.deleteMany({ userId });
@@ -1779,7 +1832,7 @@ const userController = {
           category: p.categoryId || null,
           timestamp: p.timestamp,
           likes: p.likes || 0,
-          views: p.views || 0,
+          views: p.viewCount || 0,
           visibility: p.visibility || 'public',
           tags: p.tags || [],
           images: (p.images || []).map(img => img.url)
@@ -2095,6 +2148,17 @@ const userController = {
         return res.status(400).json(generateErrorResponse('QQ登录未配置，请联系管理员'));
       }
       const type = req.query.type === 'bind' ? 'bind' : 'login';
+
+      // 安全：本接口同时服务「登录」与「绑定」两种场景，登录场景必须匿名可用，
+      // 因此路由无法整体加 authenticateUser；但绑定场景必须要求身份——
+      // 若放行匿名 bind，session.userId 会缺失，回调里 updateUser(undefined, ...) 会退化成
+      // findOneAndUpdate({})（Mongoose 会剔除值为 undefined 的查询路径），命中集合里的第一个
+      // 用户（通常是最早注册者，很可能是管理员），从而把攻击者的 QQ openid 绑到受害者账号上，
+      // 之后用 QQ 登录即可接管该账号。
+      if (type === 'bind' && !req.user) {
+        return res.status(401).json(generateErrorResponse('请先登录后再绑定QQ'));
+      }
+
       const state = uuidv4();
       const session = { type };
       if (type === 'bind' && req.user) {
@@ -2139,6 +2203,11 @@ const userController = {
 
       if (session.type === 'bind') {
         // ===== 绑定场景（需登录）=====
+        // 纵深防御：即使会话被构造，也绝不接受缺失 userId 的绑定请求。
+        // 见 getQqAuthorizeUrl 处注释 —— updateUser(undefined) 会命中任意用户。
+        if (!session.userId) {
+          return failRedirect('绑定会话无效，请重新登录后再试');
+        }
         if (existing) {
           session.result = existing.id === session.userId
             ? { bound: true, same: true, nickname: profile.nickname, avatar: profile.avatar }
@@ -2181,6 +2250,9 @@ const userController = {
       if (!state) return res.status(400).json(generateErrorResponse('参数缺失'));
       const session = await qqCache.get(state);
       if (!session) return res.status(404).json(generateErrorResponse('QQ授权会话已过期，请重新登录'));
+      // 一次性凭证：读取即消费。state 会出现在 302 跳转 URL 里（浏览器历史 / Referer 可泄露），
+      // 不消费的话 10 分钟内可被重放换取登录 Cookie。
+      await qqCache.delete(state);
       const profile = session.profile || {};
 
       // QQ 登录成功时同样下发 HttpOnly Cookie（前端从这个接口拿结果，是浏览器侧的主路径）
