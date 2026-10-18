@@ -1309,6 +1309,7 @@ const settingsManager = {
       
       if (response.ok && data.success) {
         this.state.passwordChange.isCodeVerified = true;
+        this.state.passwordChange.verificationCode = verificationCode;
         this.goToPasswordStep(3);
         utils.showNotification('验证码验证成功，请设置新密码', 'success');
       } else {
@@ -1360,7 +1361,9 @@ const settingsManager = {
         headers: userManager.getAuthHeaders(),
         body: JSON.stringify({
           currentPassword: this.state.passwordChange.currentPassword,
-          newPassword: newPassword
+          newPassword: newPassword,
+          // 后端 changePassword 强制校验该码；预校验步骤只做 peek 不消费，这里才真正消费
+          verificationCode: this.state.passwordChange.verificationCode
         })
       });
       

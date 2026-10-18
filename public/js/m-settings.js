@@ -250,6 +250,7 @@
   // ---------- 修改密码（三步） ----------
   function passwordSheet() {
     var current = null;
+    var code = null;
     var html =
       '<div id="pw-step1">' +
         '<div class="m-field"><label class="m-label">当前密码</label>' +
@@ -285,7 +286,7 @@
     });
 
     B('#pw-to3').addEventListener('click', async function () {
-      var code = input('pw-code');
+      code = input('pw-code');
       if (!code) { mApp.toast('请输入验证码', 'warning'); return; }
       this.disabled = true;
       try {
@@ -301,7 +302,11 @@
       if (!np) { mApp.toast('请输入新密码', 'warning'); return; }
       this.disabled = true;
       try {
-        await mApp.api.post('/api/change-password', { currentPassword: current, newPassword: np });
+        await mApp.api.post('/api/change-password', {
+          currentPassword: current,
+          newPassword: np,
+          verificationCode: code
+        });
         mApp.toast('密码修改成功', 'success');
         s.close();
       } catch (e) { this.disabled = false; }
