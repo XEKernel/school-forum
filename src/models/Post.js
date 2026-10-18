@@ -172,6 +172,12 @@ const PostSchema = new Schema({
     type: String
   }],
   comments: [CommentSchema],
+  // 评论数组的并发控制版本号：每次评论写入 +1，用于 CAS。
+  // 不能靠 $size 检测 —— 回复挂在 comments[i].replies 里，顶层长度不变。
+  commentsVersion: {
+    type: Number,
+    default: 0
+  },
   viewCount: {
     type: Number,
     default: 0

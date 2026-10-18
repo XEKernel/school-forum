@@ -175,6 +175,37 @@ async function checkPostWritable(post, viewerId) {
   return null;
 }
 
+/**
+ * 带并发检测的评论数组回写。
+ *
+ * comments 是 Post 的内嵌数组，最深 6 层回复，MongoDB 的 positional operator
+ * 无法表达这种动态深度，只能「读出 → 修改 → 整字段写回」；而整字段覆盖会静默
+ * 抹掉并发写入的内容（丢评论、已删除的评论被复活）。
+ *
+ * 用 commentsVersion 做 CAS：读取时记下版本，写入时要求版本未变，并原子 +1。
+ * 不能用 $size 代替 —— 回复挂在 comments[i].replies 里，顶层数组长度不变，
+ * 检测不到回复的并发增删（实测 10 并发丢失 6 条）。
+ *
+ * 旧文档没有该字段，expectedVersion=0 时同时接受「字段缺失」。
+ *
+ * @param {string} postId
+ * @param {number} expectedVersion 读取时的 commentsVersion
+ * @param {Array}  comments        修改后的完整数组
+ * @returns {Promise<boolean>}     true=写入成功；false=检测到并发修改
+ */
+async function writeCommentsGuarded(postId, expectedVersion, comments) {
+  const base = { id: postId, isDeleted: { $ne: true } };
+  const filter = expectedVersion === 0
+    ? { ...base, $or: [{ commentsVersion: 0 }, { commentsVersion: { $exists: false } }] }
+    : { ...base, commentsVersion: expectedVersion };
+
+  const result = await Post.updateOne(
+    filter,
+    { $set: { comments }, $inc: { commentsVersion: 1 } }
+  );
+  return result.matchedCount > 0;
+}
+
 const postController = {
   // 获取帖子列表（支持分页、搜索和排序）— DB 级查询重构版
   async getPosts(req, res) {
@@ -975,6 +1006,8 @@ const postController = {
       }
       
       const comments = post.comments || [];
+      // 乐观并发基准：写入前要求 commentsVersion 未变（$size 检测不到 replies）
+      const commentsVersionBeforeEdit = post.commentsVersion || 0;
       const commentIndex = comments.findIndex(c => c.id === commentId);
       
       if (commentIndex === -1) {
@@ -1015,7 +1048,11 @@ const postController = {
         }
         
         parentReply.replies.splice(nestedReplyIndex, 1);
-        await updatePost(postId, { comments });
+        const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
+        if (!commentWriteOk) {
+          await postCache.delete(postId);
+          return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
+        }
         
         // 清除帖子缓存
         await postCache.delete(postId);
@@ -1052,7 +1089,11 @@ const postController = {
         const orphanNested = Array.isArray(reply.replies) ? reply.replies.slice() : [];
 
         comment.replies.splice(replyIndex, 1);
-        await updatePost(postId, { comments });
+        const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
+        if (!commentWriteOk) {
+          await postCache.delete(postId);
+          return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
+        }
         
         // 清除帖子缓存
         await postCache.delete(postId);
@@ -1095,7 +1136,11 @@ const postController = {
       }
 
       comments.splice(commentIndex, 1);
-      await updatePost(postId, { comments });
+      const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
+      if (!commentWriteOk) {
+        await postCache.delete(postId);
+        return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
+      }
       
       // 清除帖子缓存
       await postCache.delete(postId);
@@ -1341,6 +1386,8 @@ const postController = {
       }
 
       const comments = post.comments || [];
+      // 乐观并发基准：写入前要求 commentsVersion 未变（$size 检测不到 replies）
+      const commentsVersionBeforeEdit = post.commentsVersion || 0;
       const commentIndex = comments.findIndex(c => c.id === commentId);
       
       if (commentIndex === -1) {
@@ -1435,7 +1482,15 @@ const postController = {
         comment.replies.push(newReply);
       }
       
-      await updatePost(postId, { comments });
+      const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
+      
+      if (!commentWriteOk) {
+      
+        await postCache.delete(postId);
+      
+        return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
+      
+      }
       // 清除帖子缓存（缺了它，后续 GET 会命中旧缓存：新回复看不到、评论点赞态回退）
       await postCache.delete(postId);
       
@@ -1489,6 +1544,8 @@ const postController = {
       };
 
       const comments = post.comments || [];
+      // 乐观并发基准：写入前要求 commentsVersion 未变（$size 检测不到 replies）
+      const commentsVersionBeforeEdit = post.commentsVersion || 0;
       const targetComment = findCommentOrReply(comments, commentId);
 
       if (!targetComment) {
@@ -1520,7 +1577,15 @@ const postController = {
       targetComment.likes = newLikes;
       targetComment.likedBy = newLikedBy;
 
-      await updatePost(postId, { comments });
+      const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
+
+      if (!commentWriteOk) {
+
+        await postCache.delete(postId);
+
+        return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
+
+      }
 
       // 清除帖子缓存（缺了它，后续 GET 会命中旧缓存：新回复看不到、评论点赞态回退）
       await postCache.delete(postId);
@@ -1568,6 +1633,8 @@ const postController = {
       };
 
       const comments = post.comments || [];
+      // 乐观并发基准：写入前要求 commentsVersion 未变（$size 检测不到 replies）
+      const commentsVersionBeforeEdit = post.commentsVersion || 0;
       const comment = comments.find(c => c.id === commentId);
       if (!comment) {
         return res.status(404).json(generateErrorResponse('评论不存在'));
@@ -1603,7 +1670,15 @@ const postController = {
       targetReply.likes = newLikes;
       targetReply.likedBy = newLikedBy;
 
-      await updatePost(postId, { comments });
+      const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
+
+      if (!commentWriteOk) {
+
+        await postCache.delete(postId);
+
+        return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
+
+      }
 
       // 清除帖子缓存（缺了它，后续 GET 会命中旧缓存：新回复看不到、评论点赞态回退）
       await postCache.delete(postId);
