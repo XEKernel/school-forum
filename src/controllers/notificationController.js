@@ -111,10 +111,13 @@ const notificationController = {
       // userId 来自已认证的 JWT，防止操作他人通知
       const userId = req.user.id;
       
-      const notifications = await getNotifications(userId);
-      // 广播通知（target='all'）userId 为 null，需按 target 放行
-      const notification = notifications.find(n =>
-        n.id === notificationId && (n.userId === userId || n.target === 'all'));
+      // 直接按 id 查询：getNotifications 固定只取最近 50 条，
+      // 超过 50 条的旧通知永远找不到，用户点「标记已读」只会得到 404。
+      // 广播通知（target='all'）userId 为 null，需按 target 放行。
+      const notification = await Notification.findOne({
+        id: notificationId,
+        $or: [{ userId: userId }, { target: 'all' }]
+      }).lean();
 
       if (!notification) {
         return res.status(404).json(generateErrorResponse('通知不存在'));

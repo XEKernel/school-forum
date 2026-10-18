@@ -21,7 +21,10 @@ const NotificationSchema = new Schema({
   type: {
     type: String,
     required: true,
-    enum: ['like', 'comment', 'comment_reply', 'system', 'follow'],
+    // comment_like 对应「评论被点赞」通知。此前漏在 enum 外，导致
+    // createCommentLikeNotification 里的 createNotification 必然抛 ValidationError
+    // （被 catch 静默吞掉），评论点赞通知 100% 发不出去。
+    enum: ['like', 'comment', 'comment_reply', 'comment_like', 'system', 'follow'],
     index: true
   },
   // 群发消息标题（systemType='broadcast' 时使用）

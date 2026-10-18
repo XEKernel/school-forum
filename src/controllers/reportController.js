@@ -273,7 +273,18 @@ const reportController = {
         return res.status(400).json(generateErrorResponse('该举报已被处理'));
       }
 
-      const banDays = action === 'approve' ? (banDuration || BAN_DURATION_MAP[report.reason]) : null;
+      // req.body 里的 banDuration 可能是字符串（如 "7"）。直接参与
+      // banEndTime.setDate(getDate() + banDays) 会变成字符串拼接（18 + "7" = "187"），
+      // 封禁期被放大到半年。这里强制转整数并限定上限。
+      const rawBanDays = action === 'approve' ? (banDuration ?? BAN_DURATION_MAP[report.reason]) : null;
+      let banDays = null;
+      if (rawBanDays !== null && rawBanDays !== undefined) {
+        const parsed = Number(rawBanDays);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+          return res.status(400).json(generateErrorResponse('封禁天数无效'));
+        }
+        banDays = Math.min(Math.floor(parsed), 3650);
+      }
 
       // 原子认领：把 pending 改成目标状态这一步同时充当「独占锁」，
       // 只有认领成功的请求才有权执行后续封禁，避免两个管理员同时处理造成重复封禁（原实现先读后写存在 TOCTOU）
@@ -422,7 +433,15 @@ const reportController = {
         });
       }
 
-      res.json(generateSuccessResponse({ report }, '举报已处理'));
+      // report 是处理前读出的快照：直接返回会让前端看到 status 仍是 pending、
+      // processedAt 仍是 null，误以为未处理而重复点击（随后才收到 409）。
+      const processedReport = {
+        ...report,
+        status: action === 'approve' ? 'processed' : 'rejected',
+        processedAt: new Date(),
+        processedBy: adminId
+      };
+      res.json(generateSuccessResponse({ report: processedReport }, '举报已处理'));
     } catch (error) {
       logger.logError('处理举报失败', { error: error.message, reportId: req.params.reportId });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));

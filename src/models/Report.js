@@ -55,7 +55,10 @@ const ReportSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'processed'],
+    // rejected 对应「举报被驳回」。此前 processReport 会写入该值，但不在 enum 内：
+    // findOneAndUpdate 不跑 validator 所以能写进去，库里留下 schema 未定义的状态，
+    // 之后任何 save()/validate() 都会失败，统计与筛选也建立在非法枚举上。
+    enum: ['pending', 'processed', 'rejected'],
     default: 'pending',
     index: true
   },
