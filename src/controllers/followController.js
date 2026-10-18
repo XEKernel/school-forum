@@ -159,11 +159,11 @@ const followController = {
       
       logger.logInfo('关注状态检查结果', { followerId, followingId, isFollowing });
 
-      // 同步更新Redis缓存
-      if (isFollowing) {
-        await followCache.addFollowing(followerId, followingId);
-      }
-
+      // 这里曾调用 followCache.addFollowing()，而它内部会 INCR 关注数/粉丝数。
+      // SADD 幂等但 INCR 不幂等：前端每次打开资料卡都会再 +1，而且 followerId / followingId
+      // 全部来自 query，任何登录用户都能对任意一对用户反复请求，把别人的粉丝数刷到任意大，
+      // getFollowStats 又会优先读这两个被污染的 key（30 分钟 TTL）。
+      // 只读接口不应该写缓存，缓存一致性交给 follow / unfollow 维护。
       res.json(generateSuccessResponse({
         isFollowing
       }));
@@ -211,7 +211,17 @@ const followController = {
   async getFollowingList(req, res) {
     try {
       const userId = req.params.userId;
-      const currentUserId = req.query.currentUserId; // 当前登录用户ID
+      // 当前用户只认 JWT：此前取自 query，可伪造，导致 isFollowing 反映的是被冒充者的关系
+      const currentUserId = req.user.id;
+      // 归属校验：关注/粉丝列表属隐私数据，只允许本人或管理员查看。
+      // 此前 userId 取自 params 且无任何校验，任意登录用户可整表拉走全站社交关系。
+      if (req.user.id !== userId) {
+        const viewer = await User.findOne({ id: req.user.id }).select('role').lean();
+        if (!viewer || viewer.role !== 'admin') {
+          return res.status(403).json(generateErrorResponse('无权查看该用户的列表'));
+        }
+      }
+
       const page = Math.max(1, parseInt(req.query.page, 10) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
       const skip = (page - 1) * limit;
@@ -274,7 +284,16 @@ const followController = {
   async getFollowerList(req, res) {
     try {
       const userId = req.params.userId;
-      const currentUserId = req.query.currentUserId; // 当前登录用户ID
+      const currentUserId = req.user.id;
+      // 归属校验：关注/粉丝列表属隐私数据，只允许本人或管理员查看。
+      // 此前 userId 取自 params 且无任何校验，任意登录用户可整表拉走全站社交关系。
+      if (req.user.id !== userId) {
+        const viewer = await User.findOne({ id: req.user.id }).select('role').lean();
+        if (!viewer || viewer.role !== 'admin') {
+          return res.status(403).json(generateErrorResponse('无权查看该用户的列表'));
+        }
+      }
+
       const page = Math.max(1, parseInt(req.query.page, 10) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
       const skip = (page - 1) * limit;
@@ -337,6 +356,13 @@ const followController = {
   async getFollowingPosts(req, res) {
     try {
       const userId = req.params.userId;
+      // 关注流会暴露「某人关注了谁」（通过帖子作者反推），属隐私数据，只允许本人或管理员
+      if (req.user.id !== userId) {
+        const viewer = await User.findOne({ id: req.user.id }).select('role').lean();
+        if (!viewer || viewer.role !== 'admin') {
+          return res.status(403).json(generateErrorResponse('无权查看该用户的关注流'));
+        }
+      }
       const page = Math.max(1, parseInt(req.query.page, 10) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 10));
       const skip = (page - 1) * limit;

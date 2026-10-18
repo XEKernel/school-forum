@@ -216,6 +216,24 @@ const UserSchema = new Schema({
     type: Boolean,
     default: true
   },
+  // 封禁信息。此前 adminController.banUser 会写这四个字段，但 schema 里没有，
+  // Mongoose strict 静默丢弃 → 后台列表看不到封禁原因与期限，unban 的 $unset 也是空操作。
+  banStartTime: {
+    type: String,
+    default: null
+  },
+  banEndTime: {
+    type: String,
+    default: null
+  },
+  banReason: {
+    type: String,
+    default: null
+  },
+  bannedBy: {
+    type: String,
+    default: null
+  },
   // 角色：管理员权限的唯一权威来源（配合 config.adminUsers 的 UUID 白名单）
   // 说明：此前用「qq 是否命中 adminUsers」判定管理员，而 qq 是注册时自填、且可通过
   // changeQQ 修改的字段 —— 未注册的 QQ 一旦进入白名单，任何人都能改绑该 QQ 拿到后台权限。

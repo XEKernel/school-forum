@@ -118,6 +118,12 @@ const adminController = {
         return res.status(404).json(generateErrorResponse('帖子不存在'));
       }
 
+      // 发送系统通知给帖子作者。
+      // 必须在物理删除之前：createPostDeletedNotification 内部会 getPostById，
+      // 删完之后拿不到帖子会直接 return，通知静默丢失（此处此前也漏了 await）。
+      const notificationController = require('./notificationController');
+      await notificationController.createPostDeletedNotification(postId, post.userId, reason, adminId);
+
       // 永久删除帖子
       await permanentDeletePost(postId);
 
@@ -157,10 +163,6 @@ const adminController = {
         await userCache.delete(post.userId);
       }
       
-      // 发送系统通知给帖子作者
-      const notificationController = require('./notificationController');
-      notificationController.createPostDeletedNotification(postId, post.userId, reason, adminId);
-      
       res.json(generateSuccessResponse({}, '帖子已永久删除'));
     } catch (error) {
       logger.logError('永久删除帖子失败', { error: error.message, postId: req.params.id });
@@ -182,8 +184,18 @@ const adminController = {
         return res.status(404).json(generateErrorResponse('用户不存在'));
       }
       
-      // 计算封禁结束时间
-      const banDuration = parseInt(duration) || 7;
+      // 不能封自己：否则唯一管理员会被锁在后台之外，系统内没有任何自救入口
+      if (adminId === userId) {
+        return res.status(400).json(generateErrorResponse('不能封禁自己'));
+      }
+      // 不能封其他管理员：封了等于一键夺权，且对方无法自行恢复
+      if (user.role === 'admin') {
+        return res.status(403).json(generateErrorResponse('不能封禁管理员账号'));
+      }
+
+      // 计算封禁结束时间（duration 允许字符串，必须转成正整数，负数会算出「过去时间」的封禁）
+      const parsedDuration = parseInt(duration, 10);
+      const banDuration = (Number.isFinite(parsedDuration) && parsedDuration > 0) ? parsedDuration : 7;
       const banEndTime = new Date();
       
       if (banDuration === 365) {

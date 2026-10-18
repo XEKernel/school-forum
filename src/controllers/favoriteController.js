@@ -136,8 +136,10 @@ const favoriteController = {
       const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
 
       // 归属校验（2026-08-10 渗透测试修复：IDOR）——只能查看自己或管理员查看任意用户
-      const viewer = await User.findOne({ id: req.user.id }).select('isAdmin').lean();
-      if (req.user.id !== userId && !(viewer && viewer.isAdmin)) {
+      // User schema 里没有 isAdmin 字段（只有 role），select('isAdmin') 恒为 undefined，
+      // 导致管理员也看不了他人收藏。改为 role 判定。
+      const viewer = await User.findOne({ id: req.user.id }).select('role').lean();
+      if (req.user.id !== userId && !(viewer && viewer.role === 'admin')) {
         return res.status(403).json(generateErrorResponse('无权查看该用户的收藏'));
       }
 
@@ -213,8 +215,10 @@ const favoriteController = {
       }
 
       // 归属校验（2026-08-10 渗透测试修复：IDOR）
-      const viewer = await User.findOne({ id: req.user.id }).select('isAdmin').lean();
-      if (req.user.id !== userId && !(viewer && viewer.isAdmin)) {
+      // User schema 里没有 isAdmin 字段（只有 role），select('isAdmin') 恒为 undefined，
+      // 导致管理员也看不了他人收藏。改为 role 判定。
+      const viewer = await User.findOne({ id: req.user.id }).select('role').lean();
+      if (req.user.id !== userId && !(viewer && viewer.role === 'admin')) {
         return res.status(403).json(generateErrorResponse('无权查看该用户的收藏'));
       }
 
@@ -270,8 +274,10 @@ const favoriteController = {
       }
 
       // 归属校验（2026-08-10 渗透测试修复：IDOR）——收藏标签为隐私信息，仅本人或管理员可见
-      const viewer = await User.findOne({ id: req.user.id }).select('isAdmin').lean();
-      if (req.user.id !== userId && !(viewer && viewer.isAdmin)) {
+      // User schema 里没有 isAdmin 字段（只有 role），select('isAdmin') 恒为 undefined，
+      // 导致管理员也看不了他人收藏。改为 role 判定。
+      const viewer = await User.findOne({ id: req.user.id }).select('role').lean();
+      if (req.user.id !== userId && !(viewer && viewer.role === 'admin')) {
         return res.status(403).json(generateErrorResponse('无权查看该用户的收藏标签'));
       }
 
