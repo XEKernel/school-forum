@@ -64,6 +64,72 @@
   --btn-padding-lg: 12px 28px;
   --btn-font-size: 14px;
   --btn-font-size-sm: 13px;
+
+  /* 代码块配色（原先只由 js/user.js 内联注入，CSS 中 8 处 var() 引用无定义） */
+  --code-bg: #f6f8fa;
+  --inline-code-bg: #f0f2f4;
+  --code-border: #e4e6e8;
+  --code-header-bg: #2f3a45;
+  --code-text: #1f2328;
+  --button-text: #ffffff;
+}
+
+/* 暗色主题：变量层
+   此前暗色完全依赖逐元素覆盖（style.css 72 条 + admin.css 298 条），没有变量切换，
+   任何未覆盖到的元素在暗色下都会保持浅色，出现白底白字。
+   这里与 js/user.js 的 themes.dark 逐值一致 —— 该处已改为只切换 data-theme，
+   变量定义以此处为唯一真相。
+   色阶：#0f172a 页面底 → #1e293b 卡片 → #2a3648 次级/边框 → #334155 强边框 */
+[data-theme="dark"] {
+  /* 主色：暗底上需提亮，否则 #2b6cb0 对比度不足 */
+  --primary-color: #5a9bdd;
+  --primary-light: #1e2f42;
+  --primary-dark: #6fabe2;
+  --secondary-color: #4a7fa8;
+
+  /* 文字 */
+  --text-color: #e2e8f0;
+  --text-light: #94a3b8;
+  --text-muted: #64748b;
+  --icon-color: #94a3b8;
+
+  /* 背景 */
+  --background-light: #0f172a;
+  --background-card: #1e293b;
+  --background-hover: #2a3648;
+
+  /* 边框 */
+  --border-color: #334155;
+  --border-light: #2a3648;
+
+  /* 语义色 */
+  --success-color: #4ade80;
+  --success-dark: #2f9e44;
+  --error-color: #ff6b6b;
+  --error-dark: #e03131;
+  --warning-color: #fbbf24;
+  --warning-dark: #f08c00;
+  --info-color: #60a5fa;
+  --info-dark: #1971c2;
+  --favorite-color: #fbbf24;
+  --favorite-dark: #e67700;
+  --dislike-color: #f472b6;
+  --dislike-dark: #d6336c;
+
+  /* 阴影在暗色下加深，否则层次不可见 */
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.4);
+
+  /* 代码块 */
+  --code-bg: #1e1e1e;
+  --inline-code-bg: #2d2d2d;
+  --code-border: #404040;
+  --code-header-bg: #252526;
+  --code-text: #d4d4d4;
+  --button-text: #ffffff;
 }
 
 * {
@@ -155,11 +221,18 @@ header {
   padding: 0 12px;
 }
 
-.search-box-wrapper input {
+/* 注意：第 695 行有 input[type="text"], input[type="password"], textarea, select
+   的通用规则（0,1,1），与本选择器同优先级且位置更靠后，会把这里声明的
+   background/border/padding 全部覆盖，导致搜索框变成纯白实底 + 直角边框，
+   与两侧半透明的 .search-box-wrapper 割裂。
+   故显式带上 [type="text"] 把优先级提到 (0,2,1)。 */
+.search-box-wrapper input,
+.search-box-wrapper input[type="text"] {
   flex: 1;
   background: transparent;
   border: none;
-  color: white;
+  border-radius: 0;
+  color: #fff;
   font-size: 14px;
   padding: 10px 5px;
   outline: none;
@@ -307,7 +380,9 @@ header {
 
 .notification-area {
   position: fixed;
-  top: 20px;
+  /* 20px 会压在 60px 高的 header 上，通知与导航文字互相干扰；
+     下移到导航栏下方留出 20px 间距 */
+  top: 80px;
   right: 20px;
   max-width: 380px;
   z-index: 10000;
@@ -896,7 +971,7 @@ textarea {
   .notification-area {
     left: 12px;
     right: 12px;
-    top: 12px;
+    top: 68px;
     max-width: none;
   }
 
@@ -3947,7 +4022,7 @@ textarea {
 }
 
 [data-theme="dark"] .header-user-avatar.admin-avatar i {
-  color: #818cf8;
+  color: #5a9bdd;
 }
 
 /* 收藏标签选择弹窗 */
@@ -4158,7 +4233,7 @@ textarea {
 }
 
 [data-theme="dark"] .header-user-avatar.admin-avatar .header-avatar-image {
-  border-color: #818cf8;
+  border-color: #5a9bdd;
 }
 
 /* 暗色模式搜索框 */
@@ -4189,7 +4264,7 @@ textarea {
 
 [data-theme="dark"] .clear-search-btn {
   border-color: #2b6cb0;
-  color: #818cf8;
+  color: #5a9bdd;
 }
 
 [data-theme="dark"] .clear-search-btn:hover {
@@ -4215,7 +4290,7 @@ textarea {
 [data-theme="dark"] .sort-btn:hover {
   background: rgba(43, 108, 176, 0.15);
   border-color: #2b6cb0;
-  color: #818cf8;
+  color: #5a9bdd;
 }
 
 [data-theme="dark"] .sort-btn.active {
@@ -5367,12 +5442,12 @@ mjx-container svg {
 [data-theme="dark"] #login-btn,
 [data-theme="dark"] #register-btn {
   background: #1e293b;
-  color: #818cf8;
+  color: #5a9bdd;
 }
 
 [data-theme="dark"] #login-btn:hover,
 [data-theme="dark"] #register-btn:hover {
-  background: #818cf8;
+  background: #5a9bdd;
   color: #0f172a;
 }
 
@@ -5418,4 +5493,26 @@ mjx-container svg {
   .container { padding: 0 12px; }
   /* 触屏操作区稍微放大，避免误点 */
   .action-btn { padding: 8px 12px; }
+}
+
+/* ===== 暗色：Markdown 渲染块 =====
+   引用块 / 公式块 / 表格斑马纹此前是硬编码浅灰（#f8f9fa 等），
+   暗色主题下会在深色帖子正文里出现刺眼的亮块。 */
+[data-theme="dark"] .md-blockquote {
+  background: rgba(255, 255, 255, 0.04);
+  border-left-color: var(--primary-color);
+}
+
+[data-theme="dark"] .math-block {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .enhanced-table tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="dark"] .enhanced-table td .inline-code,
+[data-theme="dark"] .md-blockquote .inline-code {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-color);
 }

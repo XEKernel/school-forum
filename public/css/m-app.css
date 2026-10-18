@@ -7,7 +7,7 @@
   --m-primary: #2b6cb0;
   --m-primary-dark: #245a94;
   --m-primary-light: #ebf4fc;
-  --m-accent: #1e88e5;
+  --m-accent: #1971c2; /* 与桌面端 --info-color 对齐；原 #1e88e5 是 Material 蓝，不在体系内 */
 
   --m-success: #2f9e44;
   --m-error: #e03131;
@@ -24,10 +24,12 @@
   --m-border: #e8eaed;
   --m-hover: #f5f7fa;
 
-  --m-radius-sm: 8px;
-  --m-radius: 12px;
-  --m-radius-lg: 18px;
-  --m-radius-xl: 24px;
+  /* 与桌面端一致：直角为基准；--m-radius-full 保留圆形（头像、徽标） */
+  --m-radius-sm: 0;
+  --m-radius: 0;
+  --m-radius-lg: 0;
+  --m-radius-xl: 0;
+  --m-radius-full: 50%;
 
   --m-shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .04);
   --m-shadow-up: 0 -2px 12px rgba(16, 24, 40, .08);
@@ -38,6 +40,35 @@
   --m-safe-t: env(safe-area-inset-top, 0px);
 
   --m-ease: cubic-bezier(.22, .61, .36, 1);
+}
+
+/* 暗色主题
+   移动端此前完全没有暗色适配（m-app.css 中 0 条 dark 规则，m-*.html 也不设 data-theme），
+   用户在桌面端选了暗色后切到移动端页面会突然全白。
+   data-theme 由 js/m-app.js 顶部根据 localStorage.forumTheme 或系统偏好设置。 */
+[data-theme="dark"] {
+  --m-primary: #5a9bdd;
+  --m-primary-dark: #6fabe2;
+  --m-primary-light: #1e2f42;
+  --m-accent: #60a5fa;
+
+  --m-success: #4ade80;
+  --m-error: #ff6b6b;
+  --m-warning: #fbbf24;
+  --m-favorite: #fbbf24;
+
+  --m-text: #e2e8f0;
+  --m-text-2: #94a3b8;
+  --m-text-3: #64748b;
+  --m-text-invert: #0f172a;
+
+  --m-bg: #0f172a;
+  --m-card: #1e293b;
+  --m-border: #2a3648;
+  --m-hover: #334155;
+
+  --m-shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 1px 3px rgba(0, 0, 0, .25);
+  --m-shadow-up: 0 -2px 12px rgba(0, 0, 0, .4);
 }
 
 * {
@@ -214,7 +245,7 @@ img {
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--m-error);
   color: #fff;
   font-size: 10px;
@@ -315,7 +346,7 @@ img {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 16px;
+  border-radius: 0;
   background: var(--m-card);
   border: 1px solid var(--m-border);
   color: var(--m-text-2);
@@ -488,7 +519,7 @@ img {
 .m-post-body :not(pre) > code {
   background: var(--m-hover);
   padding: 1px 5px;
-  border-radius: 5px;
+  border-radius: 0;
 }
 
 .m-post-body a {
@@ -513,7 +544,7 @@ img {
   align-items: center;
   height: 20px;
   padding: 0 8px;
-  border-radius: 10px;
+  border-radius: 0;
   background: var(--m-hover);
   color: var(--m-text-3);
   font-size: 11px;
@@ -631,7 +662,7 @@ img {
 
 .m-skel-line {
   height: 11px;
-  border-radius: 6px;
+  border-radius: 0;
   background: linear-gradient(90deg, #eef0f3 25%, #f6f7f9 37%, #eef0f3 63%);
   background-size: 400% 100%;
   animation: m-shimmer 1.3s ease infinite;
@@ -707,7 +738,7 @@ img {
 .m-cat-ico {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1150,7 +1181,7 @@ img {
   min-height: 40px;
   max-height: 108px;
   padding: 9px 13px;
-  border-radius: 20px;
+  border-radius: 0;
   background: var(--m-hover);
   font-size: 14.5px;
   line-height: 1.4;
@@ -1197,7 +1228,7 @@ img {
 .m-toast {
   max-width: 100%;
   padding: 10px 16px;
-  border-radius: 22px;
+  border-radius: 0;
   background: rgba(28, 32, 36, .92);
   color: #fff;
   font-size: 13.5px;
@@ -1242,7 +1273,7 @@ img {
   max-width: 96vw;
   max-height: 88vh;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .m-viewer-close {
@@ -1542,7 +1573,7 @@ select.m-input {
   gap: 7px;
   height: 38px;
   padding: 0 14px;
-  border-radius: 19px;
+  border-radius: 0;
   background: var(--m-hover);
   color: var(--m-text-2);
   font-size: 13.5px;
@@ -1589,7 +1620,7 @@ select.m-input {
   flex: none;
   height: 32px;
   padding: 0 15px;
-  border-radius: 16px;
+  border-radius: 0;
   font-size: 13px;
   background: var(--m-primary);
   color: #fff;
@@ -1657,7 +1688,7 @@ select.m-input {
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border-radius: 9px;
+  border-radius: 0;
   background: var(--m-error);
   color: #fff;
   font-size: 11px;
@@ -1673,7 +1704,7 @@ select.m-input {
 .m-msg {
   max-width: 78%;
   padding: 9px 12px;
-  border-radius: 15px;
+  border-radius: 0;
   font-size: 14.5px;
   line-height: 1.5;
   margin-bottom: 9px;
@@ -1699,7 +1730,7 @@ select.m-input {
 .m-msg img {
   display: block;
   max-width: 100%;
-  border-radius: 10px;
+  border-radius: 0;
   margin-top: 4px;
 }
 
@@ -1738,7 +1769,7 @@ select.m-input {
   max-height: 86vh;
   overflow-y: auto;
   background: var(--m-card);
-  border-radius: 18px 18px 0 0;
+  border-radius: 0;
   padding: 16px 16px calc(18px + var(--m-safe-b));
   transform: translateY(14px);
   transition: transform .22s var(--m-ease);
@@ -1787,4 +1818,25 @@ select.m-input {
   .m-cat-grid {
     grid-template-columns: repeat(3, 1fr);
   }
+}
+
+/* ===== 暗色：结构性表面 =====
+   以下元素把背景硬编码成了 rgba(255,255,255,.9x) / #fff，
+   暗色主题下会整条发白，且文字同时失效（浅底浅字）。
+   在补上暗色变量层之后仍需单独覆盖，因为这里的值是带透明度的
+   毛玻璃底色，无法直接用 --m-card 表达。 */
+[data-theme="dark"] .m-appbar {
+  background: rgba(30, 41, 59, .92);
+}
+
+[data-theme="dark"] .m-tabbar {
+  background: rgba(30, 41, 59, .96);
+}
+
+[data-theme="dark"] .m-cmtbar {
+  background: rgba(30, 41, 59, .97);
+}
+
+[data-theme="dark"] .m-search-bar {
+  background: #1e293b;
 }

@@ -764,7 +764,7 @@
 [data-theme="dark"] .post-card-move-tag:hover {
   background: rgba(43, 108, 176, 0.2);
   border-color: #2b6cb0;
-  color: #818cf8;
+  color: #5a9bdd;
 }
 
 /* 响应式 */
@@ -1036,13 +1036,13 @@
 [data-theme="dark"] .select-all-btn:hover {
   background: rgba(43, 108, 176, 0.2);
   border-color: #2b6cb0;
-  color: #818cf8;
+  color: #5a9bdd;
 }
 
 [data-theme="dark"] .batch-move-btn {
   background: rgba(43, 108, 176, 0.2);
   border-color: #2b6cb0;
-  color: #818cf8;
+  color: #5a9bdd;
 }
 
 [data-theme="dark"] .batch-move-btn:hover {

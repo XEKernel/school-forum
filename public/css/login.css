@@ -874,3 +874,20 @@ input[type="date"]::-webkit-date-and-time-value {
   font-size: 12px;
   margin-top: 4px;
 }
+
+/* ===== 暗色：登录页 =====
+   登录卡片与标签页此前为纯白，暗色主题下整页发白。 */
+[data-theme="dark"] .login-wrapper {
+  background: #1e293b;
+  border-color: #2a3648;
+}
+
+[data-theme="dark"] .tab-btn.active {
+  background: #2a3648;
+  color: var(--text-color);
+}
+
+[data-theme="dark"] .qq-bound-user {
+  background: #2a3648;
+  color: var(--text-color);
+}

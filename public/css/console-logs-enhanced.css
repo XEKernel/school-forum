@@ -96,11 +96,11 @@
 
 /* USER - 紫色 */
 .console-log-item.log-user {
-    border-left: 3px solid #c084fc !important;
+    border-left: 3px solid #66d9e8 !important;
 }
 
 .console-log-item.log-user .console-level [USER] {
-    color: #c084fc !important;
+    color: #66d9e8 !important;
     font-weight: 700 !important;
     text-shadow: 0 0 4px rgba(192, 132, 252, 0.3) !important;
 }
@@ -181,7 +181,7 @@
 }
 
 .console-level [USER] { 
-    color: #c084fc !important; 
+    color: #66d9e8 !important; 
     font-weight: 700 !important;
     text-shadow: 0 0 4px rgba(192, 132, 252, 0.3) !important;
 }

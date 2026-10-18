@@ -885,12 +885,18 @@
 
 /* 登录警告横幅 */
 .login-warning-banner {
-  background: #ffebee;
+  /* 原为硬编码 #ffebee，暗色主题下是一整块刺眼的浅粉，与深色页面严重割裂。
+     改用半透明红，明暗两套主题下都能自然融入。 */
+  background: rgba(224, 49, 49, 0.08);
   border: 2px solid var(--error-color);
   border-radius: var(--radius-lg);
   margin-bottom: 25px;
   padding: 20px;
   animation: slideDown 0.5s ease-out;
+}
+
+[data-theme="dark"] .login-warning-banner {
+  background: rgba(255, 107, 107, 0.12);
 }
 
 @keyframes slideDown {

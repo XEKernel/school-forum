@@ -1,20 +1,9 @@
 /* 帖子详情页样式 */
-:root {
-  --primary-color: #2b6cb0;
-  --primary-light: #edf0fe;
-  --secondary-color: #1e4e79;
-  --text-color: #333333;
-  --text-light: #666666;
-  --background-light: #f5f7fb;
-  --background-card: #ffffff;
-  --border-color: #e0e0e0;
-  --success-color: #4caf50;
-  --error-color: #f44336;
-  --warning-color: #ff9800;
-  --info-color: #2196f3;
-  --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --transition: var(--transition);
-}
+/* 说明：此处曾有 :root 覆盖块，把 --text-color/#333、--border-color/#e0e0e0、
+   语义色改成 Material Design 调色板（#4caf50/#f44336/#ff9800/#2196f3），
+   并把 --transition 写成 var(--transition) 自引用（导致 14 处过渡声明全部失效）。
+   现已移除，统一继承 css/style.css 的全局设计变量。
+   若本页确实需要偏离全局值，请用页面作用域选择器（如 .post-detail-page）而非 :root。 */
 
 /* 全局选中样式 */
 ::selection {

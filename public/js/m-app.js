@@ -7,6 +7,28 @@
 (function () {
   'use strict';
 
+  /* ---------- 主题初始化（必须最先执行，避免暗色用户白闪） ----------
+     优先级：localStorage.forumTheme（用户在桌面端选过的） > 系统偏好
+     变量定义在 css/m-app.css 的 :root 与 [data-theme="dark"]。 */
+  (function initTheme() {
+    var theme = null;
+    try {
+      theme = localStorage.getItem('forumTheme');
+      if (theme !== 'dark' && theme !== 'light') {
+        var raw = localStorage.getItem('forumUser');
+        if (raw) {
+          var u = JSON.parse(raw);
+          if (u && u.settings && u.settings.theme) theme = u.settings.theme;
+        }
+      }
+    } catch (e) {
+      /* 隐私模式下 localStorage 可能抛异常，走默认 */
+    }
+    /* 默认 light，与桌面端 userManager.state.settings.theme 保持一致 */
+    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+  })();
+
+
   var mApp = {
     // ---------- 基础工具 ----------
     escape: function (text) {

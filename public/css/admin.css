@@ -959,7 +959,7 @@
 }
 
 .log-item.log-user {
-    border-left: 3px solid #7b1fa2;
+    border-left: 3px solid #0b7285;
 }
 
 .log-item.log-system {
@@ -1021,7 +1021,7 @@
 
 .log-level-badge.log-user {
     background: #f3e5f5;
-    color: #7b1fa2;
+    color: #0b7285;
 }
 
 .log-level-badge.log-system {
@@ -1706,7 +1706,7 @@
 
 .log-user {
     background: #f3e5f5;
-    color: #7b1fa2;
+    color: #0b7285;
 }
 
 .log-system {
@@ -1894,7 +1894,7 @@
 }
 
 [data-theme="dark"] .sidebar-brand {
-    color: #818cf8;
+    color: #5a9bdd;
     border-bottom-color: #334155;
 }
 
@@ -2230,7 +2230,7 @@
 
 [data-theme="dark"] .log-item.log-user .log-icon {
     background: rgba(123, 31, 162, 0.15);
-    color: #c084fc;
+    color: #66d9e8;
 }
 
 [data-theme="dark"] .log-item.log-system .log-icon {
@@ -2260,7 +2260,7 @@
 }
 
 [data-theme="dark"] .log-item.log-user .log-level {
-    color: #c084fc;
+    color: #66d9e8;
 }
 
 [data-theme="dark"] .log-item.log-system .log-level {
@@ -2409,7 +2409,7 @@
 }
 
 [data-theme="dark"] .log-user {
-    background: #7b1fa2 !important;
+    background: #0b7285 !important;
 }
 
 [data-theme="dark"] .log-system {
@@ -2713,7 +2713,7 @@
 }
 
 [data-theme="dark"] .log-item.log-user {
-    border-left-color: #c084fc;
+    border-left-color: #66d9e8;
 }
 
 [data-theme="dark"] .log-item.log-system {
@@ -2906,7 +2906,7 @@
 
 [data-theme="dark"] .reports-stats-grid .stat-card .stat-icon {
     background: rgba(43, 108, 176, 0.2);
-    color: #818cf8;
+    color: #5a9bdd;
 }
 
 [data-theme="dark"] .reports-filter .filter-btn {
@@ -2916,13 +2916,13 @@
 }
 
 [data-theme="dark"] .reports-filter .filter-btn:hover {
-    border-color: #818cf8;
-    color: #818cf8;
+    border-color: #5a9bdd;
+    color: #5a9bdd;
 }
 
 [data-theme="dark"] .reports-filter .filter-btn.active {
-    background: #818cf8;
-    border-color: #818cf8;
+    background: #5a9bdd;
+    border-color: #5a9bdd;
 }
 
 [data-theme="dark"] .report-type-badge.post {
@@ -3035,11 +3035,11 @@
 }
 
 .report-stat-card.total {
-    border-left: 4px solid #667eea;
+    border-left: 4px solid #2b6cb0;
 }
 
 .report-stat-card.total .stat-info .stat-number {
-    color: #667eea;
+    color: #2b6cb0;
 }
 
 .report-stat-card.pending {
@@ -3770,7 +3770,7 @@
 }
 
 [data-theme="dark"] .reports-search-box input:focus {
-    border-color: #818cf8;
+    border-color: #5a9bdd;
     box-shadow: 0 0 0 4px rgba(129, 140, 248, 0.1);
 }
 
@@ -3788,7 +3788,7 @@
 }
 
 [data-theme="dark"] .filter-tab.active {
-    background: #818cf8;
+    background: #5a9bdd;
 }
 
 [data-theme="dark"] .filter-actions select {
@@ -3834,7 +3834,7 @@
 
 [data-theme="dark"] .reason-icon {
     background: rgba(129, 140, 248, 0.2);
-    color: #818cf8;
+    color: #5a9bdd;
 }
 
 [data-theme="dark"] .report-content-preview {
@@ -3858,8 +3858,8 @@
 }
 
 [data-theme="dark"] .action-btn-sm.view:hover {
-    border-color: #818cf8;
-    color: #818cf8;
+    border-color: #5a9bdd;
+    color: #5a9bdd;
 }
 
 [data-theme="dark"] .detail-content-box {
@@ -4025,13 +4025,13 @@
 [data-theme="dark"] .admin-section .stat-card,
 [data-theme="dark"] .stat-card {
     background: rgba(99, rgba(99, 102, 241, 0.05)) !important;
-    border-left-color: #818cf8 !important;
+    border-left-color: #5a9bdd !important;
 }
 
 [data-theme="dark"] .stats-grid .stat-card .stat-number,
 [data-theme="dark"] .admin-section .stat-card .stat-number,
 [data-theme="dark"] .stat-card .stat-number {
-    color: #818cf8 !important;
+    color: #5a9bdd !important;
 }
 
 [data-theme="dark"] .stats-grid .stat-card .stat-label,
@@ -4087,11 +4087,11 @@
 }
 
 [data-theme="dark"] .report-stat-card.total {
-    border-left-color: #a78bfa;
+    border-left-color: #5a9bdd;
 }
 
 [data-theme="dark"] .report-stat-card.total .stat-info .stat-number {
-    color: #a78bfa;
+    color: #5a9bdd;
 }
 
 [data-theme="dark"] .report-stat-card.pending {
@@ -4723,7 +4723,7 @@
 }
 
 .announcement-stat-card.total .stat-icon {
-    background: #667eea;
+    background: #2b6cb0;
     color: white;
 }
 
@@ -4733,7 +4733,7 @@
 }
 
 .announcement-stat-card.pinned .stat-icon {
-    background: #f093fb;
+    background: #d6336c;
     color: white;
 }
 
@@ -5290,7 +5290,7 @@
 }
 [data-theme="dark"] .broadcast-card-form input:focus,
 [data-theme="dark"] .broadcast-card-form textarea:focus {
-  border-color: #818cf8;
+  border-color: #5a9bdd;
 }
 [data-theme="dark"] .broadcast-card-form input::placeholder,
 [data-theme="dark"] .broadcast-card-form textarea::placeholder {

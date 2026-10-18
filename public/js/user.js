@@ -1,4 +1,30 @@
 // 用户管理模块
+
+/* ---------- 主题：同步应用（必须在任何渲染前执行）----------
+   原先主题只在 userManager.init() → checkAutoLogin() → applySavedTheme() 这条
+   异步链里应用，后果：
+     1. 暗色用户每次刷新都要先闪一下白底；
+     2. 任何一步失败（接口超时/脚本异常）就完全丢失主题，页面停回亮色。
+   这里在脚本执行的第一时间按 localStorage 同步设好 data-theme，
+   变量定义见 css/style.css 的 :root 与 [data-theme="dark"]。
+   无历史设置时默认 light —— 与改造前 state.settings.theme 的默认值保持一致。 */
+(function applyThemeEarly() {
+  var theme = null;
+  try {
+    var raw = localStorage.getItem('forumUser');
+    if (raw) {
+      var u = JSON.parse(raw);
+      if (u && u.settings && u.settings.theme) theme = u.settings.theme;
+    }
+    if (theme !== 'dark' && theme !== 'light') {
+      theme = localStorage.getItem('forumTheme');
+    }
+  } catch (e) {
+    /* 隐私模式或脏数据：走默认 */
+  }
+  document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+})();
+
 const userManager = {
   // 全局状态
   state: {
@@ -965,112 +991,29 @@ const userManager = {
   // 应用主题
   applyTheme: function(theme) {
     const root = document.documentElement;
-    
-    // 定义主题变量（与 style.css :root 设计体系一致：校园蓝 + 直角；
-    // 浅色 = style.css 默认值，深色 = 同色相暗色变体）
-    const themes = {
-      light: {
-        '--primary-color': '#2b6cb0',
-        '--primary-light': '#ebf4fc',
-        '--primary-dark': '#245a94',
-        '--secondary-color': '#1e4e79',
-        '--text-color': '#1f2328',
-        '--text-light': '#57606a',
-        '--text-muted': '#8c959f',
-        '--background-light': '#f6f7f8',
-        '--background-card': '#ffffff',
-        '--background-hover': '#f0f1f2',
-        '--border-color': '#e4e6e8',
-        '--border-light': '#f0f1f2',
-        '--success-color': '#2f9e44',
-        '--success-dark': '#2b8a3e',
-        '--error-color': '#e03131',
-        '--error-dark': '#c92a2a',
-        '--warning-color': '#f08c00',
-        '--warning-dark': '#e8590c',
-        '--info-color': '#1971c2',
-        '--info-dark': '#1864ab',
-        '--favorite-color': '#e67700',
-        '--favorite-dark': '#d9480f',
-        '--dislike-color': '#d6336c',
-        '--dislike-dark': '#c2255c',
-        '--icon-color': '#57606a',
-        '--shadow': '0 1px 3px rgba(0, 0, 0, 0.07)',
-        '--shadow-sm': '0 1px 2px rgba(0, 0, 0, 0.05)',
-        '--shadow-md': '0 2px 8px rgba(0, 0, 0, 0.08)',
-        '--shadow-lg': '0 4px 16px rgba(0, 0, 0, 0.10)',
-        '--code-bg': '#f6f8fa',
-        '--inline-code-bg': '#f0f2f4',
-        '--code-border': '#e4e6e8',
-        '--code-header-bg': '#2f3a45',
-        '--code-text': '#1f2328',
-        '--button-text': '#ffffff'
-      },
-      dark: {
-        '--primary-color': '#5a9bdd',
-        '--primary-light': '#1e2f42',
-        '--primary-dark': '#6fabe2',
-        '--secondary-color': '#4a7fa8',
-        '--text-color': '#e2e8f0',
-        '--text-light': '#94a3b8',
-        '--text-muted': '#64748b',
-        '--background-light': '#0f172a',
-        '--background-card': '#1e293b',
-        '--background-hover': '#2a3648',
-        '--border-color': '#334155',
-        '--border-light': '#2a3648',
-        '--success-color': '#4ade80',
-        '--success-dark': '#2f9e44',
-        '--error-color': '#ff6b6b',
-        '--error-dark': '#e03131',
-        '--warning-color': '#fbbf24',
-        '--warning-dark': '#f08c00',
-        '--info-color': '#60a5fa',
-        '--info-dark': '#1971c2',
-        '--favorite-color': '#fbbf24',
-        '--favorite-dark': '#e67700',
-        '--dislike-color': '#f472b6',
-        '--dislike-dark': '#d6336c',
-        '--icon-color': '#94a3b8',
-        '--shadow': '0 1px 3px rgba(0, 0, 0, 0.3)',
-        '--shadow-sm': '0 1px 2px rgba(0, 0, 0, 0.25)',
-        '--shadow-md': '0 2px 8px rgba(0, 0, 0, 0.35)',
-        '--shadow-lg': '0 4px 16px rgba(0, 0, 0, 0.4)',
-        '--code-bg': '#1e1e1e',
-        '--inline-code-bg': '#2d2d2d',
-        '--code-border': '#404040',
-        '--code-header-bg': '#252526',
-        '--code-text': '#d4d4d4',
-        '--button-text': '#ffffff'
-      }
-    };
-    
-    const themeVars = themes[theme] || themes.light;
-    
-    // 设置 data-theme 属性（用于CSS选择器）
-    root.setAttribute('data-theme', theme);
-    
-    // 应用CSS变量
-    Object.entries(themeVars).forEach(([key, value]) => {
-      root.style.setProperty(key, value);
-    });
+    const normalized = theme === 'dark' ? 'dark' : 'light';
+
+    // 变量定义统一在 css/style.css 的 :root 与 [data-theme="dark"] 中（唯一真相）。
+    // 这里只切换属性，不再用 inline style 逐个覆盖 —— 后者优先级高于样式表，
+    // 会导致 CSS 里新增的暗色变量全部失效，且移动端无法复用同一套主题定义。
+    root.setAttribute('data-theme', normalized);
     
     // 保存主题到状态
-    this.state.settings.theme = theme;
+    this.state.settings.theme = normalized;
     
     // 保存到localStorage（同时保存到单独的key以便未登录时也能应用）
-    localStorage.setItem('forumTheme', theme);
+    localStorage.setItem('forumTheme', normalized);
     
     const currentUser = this.state.currentUser;
     if (currentUser) {
       const forumUser = JSON.parse(localStorage.getItem('forumUser') || '{}');
       forumUser.settings = forumUser.settings || {};
-      forumUser.settings.theme = theme;
+      forumUser.settings.theme = normalized;
       localStorage.setItem('forumUser', JSON.stringify(forumUser));
     }
     
     // 触发主题更改事件
-    document.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
+    document.dispatchEvent(new CustomEvent('themechange', { detail: { theme: normalized } }));
   },
 
   // 加载用户设置
