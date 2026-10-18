@@ -147,6 +147,34 @@ async function enrichComments(comments) {
   return comments;
 }
 
+/**
+ * 写操作（评论 / 回复）的可见性与黑名单校验。
+ *
+ * 与读帖接口 getPostById 的可见性检查保持一致：此前写接口只校验「帖子存在」
+ * 与「评论区已关闭」，任何登录用户只要知道 postId，就能给 visibility='self'
+ * 的私密帖、或给「已把自己拉黑」的作者的帖子写评论；而评论还会触发通知推送
+ * 给作者，形成探测与骚扰通道。
+ *
+ * @param {Object} post     帖子文档（含 userId / visibility）
+ * @param {string} viewerId 当前登录用户 id（来自 JWT）
+ * @returns {string|null}   null 表示允许；否则为拒绝原因
+ */
+async function checkPostWritable(post, viewerId) {
+  if (!post || !post.userId || post.userId === viewerId) return null;
+
+  const hasBlockRelation = await Blacklist.hasBlockRelation(viewerId, post.userId);
+  if (hasBlockRelation) return '无法评论该帖子';
+
+  const visibility = post.visibility || 'public';
+  if (visibility === 'self') return '该帖子仅作者可见';
+  if (visibility === 'followers') {
+    const Follow = require('../models/Follow');
+    const followDoc = await Follow.findOne({ followerId: viewerId, followingId: post.userId });
+    if (!followDoc) return '该帖子仅粉丝可见，请先关注作者';
+  }
+  return null;
+}
+
 const postController = {
   // 获取帖子列表（支持分页、搜索和排序）— DB 级查询重构版
   async getPosts(req, res) {
@@ -231,7 +259,9 @@ const postController = {
           }
         }
 
-        if (cachedIds) {
+        // 缓存只覆盖前 200 条 id：页码越界时必须回退到完整计算，
+        // 否则 slice 出空数组，用户看到「有总数、无数据」且不会自愈
+        if (cachedIds && cachedIds.length > (page - 1) * limit) {
           const pageIds = cachedIds.slice((page - 1) * limit, (page - 1) * limit + limit);
           const fromDb = await Post.find({ id: { $in: pageIds } }).lean();
           const byId = new Map(fromDb.map(d => [d.id, d]));
@@ -334,10 +364,22 @@ const postController = {
         };
       });
 
-      // PII 脱敏：未登录用户隐藏真实信息
+      // PII 脱敏：未登录用户隐藏真实信息。
+      // 除帖子级 likedBy 外，dislikedBy 与评论/回复里的 likedBy 同样是用户 UUID 列表，需一并清空
+      const stripVoters = (list) => (Array.isArray(list) ? list.map(item => ({
+        ...item,
+        likedBy: [],
+        dislikedBy: [],
+        replies: stripVoters(item.replies)
+      })) : []);
       const safePosts = postsWithAvatar.map(post => {
         if (!viewerId) {
-          return { ...post, school: '', grade: '', className: '', likedBy: [] };
+          return {
+            ...post,
+            school: '', grade: '', className: '',
+            likedBy: [], dislikedBy: [],
+            comments: stripVoters(post.comments)
+          };
         }
         return post;
       });
@@ -590,9 +632,8 @@ const postController = {
         const category = await Category.findOne({ id: categoryId, isActive: true });
         if (category) {
           postCategoryId = categoryId;
-          // 增加栏目帖子数
-          category.postCount = (category.postCount || 0) + 1;
-          await category.save();
+          // 原子自增：此前是「读-改-写」，并发发帖会丢更新
+          await Category.updateOne({ id: categoryId }, { $inc: { postCount: 1 } });
         }
       }
 
@@ -631,7 +672,7 @@ const postController = {
 
       // 更新用户发帖数（user 已在函数开头查询并校验，直接复用）
       if (user) {
-        await updateUser(userId, { postCount: (user.postCount || 0) + 1 });
+        await User.updateOne({ id: userId }, { $inc: { postCount: 1 } });
       }
 
       // 清除热门帖子缓存和用户缓存
@@ -846,6 +887,13 @@ const postController = {
       // 检查评论是否已关闭
       if (post.commentsEnabled === false) {
         return res.status(403).json(generateErrorResponse('评论区已关闭'));
+      }
+
+      // 可见性与黑名单校验（与读帖接口对齐）：防止给私密帖或已拉黑自己的帖子写评论
+      const denyReason = await checkPostWritable(post, userId);
+      if (denyReason) {
+        logger.logSecurityEvent('评论被拒：帖子不可见或存在拉黑关系', { userId, postId });
+        return res.status(403).json(generateErrorResponse(denyReason));
       }
 
       const isAnonymous = anonymous === true || anonymous === 'true';
@@ -1112,16 +1160,19 @@ const postController = {
       if (post.categoryId) {
         const Category = require('../models/Category');
         const category = await Category.findOne({ id: post.categoryId });
-        if (category && category.postCount > 0) {
-          category.postCount = Math.max(0, category.postCount - 1);
-          await category.save();
+        if (category) {
+          // 原子自减，并用 postCount > 0 条件防止减成负数
+          await Category.updateOne(
+            { id: post.categoryId, postCount: { $gt: 0 } },
+            { $inc: { postCount: -1 } }
+          );
         }
       }
 
       // 更新用户发帖数
       const user = await getUserById(userId);
       if (user) {
-        await updateUser(userId, { postCount: Math.max(0, (user.postCount || 0) - 1) });
+        await User.updateOne({ id: userId, postCount: { $gt: 0 } }, { $inc: { postCount: -1 } });
         // 清除用户缓存
         await userCache.delete(userId);
       }
@@ -1201,7 +1252,9 @@ const postController = {
 
       // 更新帖子
       const updateData = {
-        content: content || post.content,
+        // 编辑路径同样要净化：全局 xssFilter 已兜底，但该开关可在后台关闭，
+        // 且创建/评论/回复三条路径都显式调用了 sanitizeHtml，这里保持一致
+        content: content ? sanitizeHtml(content) : post.content,
         images: allImages,
         updatedAt: new Date().toISOString(),
         visibility: postVisibility,
@@ -1278,6 +1331,13 @@ const postController = {
       // 检查评论是否已关闭
       if (post.commentsEnabled === false) {
         return res.status(403).json(generateErrorResponse('评论区已关闭'));
+      }
+
+      // 可见性与黑名单校验（与读帖接口对齐）
+      const denyReasonReply = await checkPostWritable(post, userId);
+      if (denyReasonReply) {
+        logger.logSecurityEvent('回复被拒：帖子不可见或存在拉黑关系', { userId, postId, commentId });
+        return res.status(403).json(generateErrorResponse(denyReasonReply));
       }
 
       const comments = post.comments || [];
@@ -1388,7 +1448,7 @@ const postController = {
         commentId,
         replyToId,
         isAnonymous,
-        contentLength: content.length
+        contentLength: (content || '').length
       });
 
       // 创建回复通知
