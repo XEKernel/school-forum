@@ -16,6 +16,16 @@ const {
   validateCommentContent
 } = require('../utils/authUtils');
 const { sanitizeHtml } = require('../utils/sanitize');
+// 评论已拆分到独立集合（src/models/Comment.js）：读写都直接操作文档，
+// 不再有「读整个嵌套数组 → 内存修改 → 整字段覆盖」的并发丢写，
+// 也不再需要 commentsVersion 那套 CAS 重试。
+const Comment = require('../models/Comment');
+const {
+  loadCommentTree,
+  loadCommentTrees,
+  countTreeNodes,
+  collectSubtreeIds
+} = require('../utils/commentUtils');
 const {
   userExists,
   isUserActive,
@@ -206,6 +216,88 @@ async function writeCommentsGuarded(postId, expectedVersion, comments) {
   return result.matchedCount > 0;
 }
 
+/**
+ * 点赞/取消点赞的统一实现（评论与回复只是目标 id 不同）。
+ *
+ * 旧实现是「读出整棵评论树 → 内存里改 likes/likedBy → 整字段覆盖写」，
+ * 即便有 commentsVersion 兜底，两人同时点赞时也会出现
+ * 「likes=1 但 likedBy 里有 2 个人」这种计数与数组不一致。
+ *
+ * 现在评论是独立文档，用 updateOne + 聚合管道做单文档原子更新：
+ *   - $setUnion / $setDifference 精确维护 likedBy（幂等）
+ *   - $add / $max 维护 likes，并保证不会减到负数
+ * 不需要读-改-写，也不会有 CAS 失败。
+ */
+async function toggleCommentLike(req, res, targetId, label) {
+  const postId = req.params.id;
+  const userId = req.user.id;
+
+  try {
+    const post = await getPostById(postId);
+    if (!post || post.isDeleted) {
+      return res.status(404).json(generateErrorResponse('帖子不存在'));
+    }
+    if (!targetId) {
+      return res.status(400).json(generateErrorResponse('缺少' + label + '标识'));
+    }
+
+    const target = await Comment.findOne({ id: targetId, postId, isDeleted: { $ne: true } })
+      .select('id userId likedBy')
+      .lean();
+    if (!target) {
+      return res.status(404).json(generateErrorResponse(label + '不存在'));
+    }
+
+    const alreadyLiked = (target.likedBy || []).includes(userId);
+    let changed = 0;
+
+    if (alreadyLiked) {
+      // $pull + $inc 都是单文档原子操作，配合上面的条件过滤（likedBy 必须含本人才执行），
+      // 不会出现「likes 减了但 likedBy 没减」这类不一致。
+      const r = await Comment.updateOne(
+        { id: targetId, postId, likedBy: userId },
+        { $pull: { likedBy: userId }, $inc: { likes: -1 } }
+      );
+      changed = r.modifiedCount || 0;
+    } else {
+      const r = await Comment.updateOne(
+        { id: targetId, postId, likedBy: { $ne: userId } },
+        { $addToSet: { likedBy: userId }, $inc: { likes: 1 } }
+      );
+      changed = r.modifiedCount || 0;
+    }
+
+    let after = await Comment.findOne({ id: targetId }).select('likes').lean();
+    // 兜底：历史脏数据可能让 likes 减到负数，这里一次性纠正（极少触发）
+    if (after && after.likes < 0) {
+      await Comment.updateOne({ id: targetId }, { $set: { likes: 0 } });
+      after = { likes: 0 };
+    }
+    const newLikes = after ? (after.likes || 0) : 0;
+
+    await postCache.delete(postId);
+
+    // 只有真正新增了点赞才发通知，避免并发重试时重复推送
+    if (!alreadyLiked && changed > 0 && target.userId !== userId) {
+      notificationController.createCommentLikeNotification(postId, targetId, userId, target.userId);
+    }
+
+    logger.logUserAction(alreadyLiked ? ('取消点赞' + label) : ('点赞' + label), userId, null, {
+      postId,
+      commentId: targetId,
+      likes: newLikes
+    });
+
+    res.json(generateSuccessResponse({
+      likes: newLikes,
+      liked: !alreadyLiked
+    }, alreadyLiked ? '取消点赞成功' : '点赞成功'));
+  } catch (error) {
+    logger.logError('点赞' + label + '失败', { error: error.message, postId, commentId: targetId });
+    res.status(500).json(generateErrorResponse('服务器内部错误', 500));
+  }
+}
+
 const postController = {
   // 获取帖子列表（支持分页、搜索和排序）— DB 级查询重构版
   async getPosts(req, res) {
@@ -321,7 +413,8 @@ const postController = {
           const likes = post.likes || 0;
           const favorites = post.favoriteCount || 0;
           const views = post.viewCount || 0;
-          const comments = post.comments ? post.comments.length : 0;
+          // 评论数读冗余计数字段（评论已拆到独立集合，候选集里不再带完整评论数组）
+          const comments = post.commentCount || 0;
           const postDate = new Date(post.timestamp);
           const now = new Date();
           const daysSincePost = Math.max(0, (now - postDate) / (1000 * 60 * 60 * 24));
@@ -341,7 +434,7 @@ const postController = {
           // 浏览量排序（降序）
           views: (a, b) => (b.viewCount || 0) - (a.viewCount || 0),
           // 评论数排序（降序）
-          comments: (a, b) => ((b.comments ? b.comments.length : 0) - (a.comments ? a.comments.length : 0)),
+          comments: (a, b) => ((b.commentCount || 0) - (a.commentCount || 0)),
           // 推荐：防信息茧房混合算法（40% 热门 + 25% 关注 + 20% 新鲜 + 15% 随机）
           recommended: (a, b) => {
             const scoreA = calculateHotScore(a);
@@ -371,6 +464,22 @@ const postController = {
         }
         }
       }
+
+      // ============ 2.5 评论树（批量） ============
+      // 列表仍需返回评论（首页卡片里的「最新评论」预览依赖 post.comments），
+      // 故一次性取出本页所有帖子的评论再按 postId 分组组装，避免按帖子逐个查询造成 N+1。
+      const pagePostIds = posts.map(p => p.id).filter(Boolean);
+      const treeByPost = await loadCommentTrees(pagePostIds);
+      posts = posts.map(p => {
+        const t = treeByPost.get(p.id) || [];
+        return {
+          ...p,
+          comments: t,
+          commentCount: typeof p.commentCount === 'number' && p.commentCount > 0
+            ? p.commentCount
+            : countTreeNodes(t)
+        };
+      });
 
       // ============ 3. 用户头像 + 栏目（批量查询，不再全量加载用户） ============
       const postUserIds = [...new Set(posts.map(p => p.userId).filter(Boolean))];
@@ -508,8 +617,20 @@ const postController = {
       // 获取用户头像信息
       const user = await getUserById(post.userId);
 
+      // 评论已拆分到独立集合：这里组装回与旧结构逐字段一致的嵌套数组
+      // （顶层按时间倒序、回复按时间正序），前端与 Android 客户端无需任何改动。
+      const commentTree = await loadCommentTree(postId);
+
       // 过滤黑名单用户的评论（如果用户开启了该设置）
-      let filteredPost = { ...post, userAvatar: user && user.avatar ? user.avatar : null };
+      let filteredPost = {
+        ...post,
+        comments: commentTree,
+        // commentCount 取 Post 上的冗余计数（不受黑名单过滤影响）；老数据无此字段时回退到树节点数
+        commentCount: typeof post.commentCount === 'number' && post.commentCount > 0
+          ? post.commentCount
+          : countTreeNodes(commentTree),
+        userAvatar: user && user.avatar ? user.avatar : null
+      };
       
       if (viewerId && post.comments && post.comments.length > 0) {
         const viewer = await getUserById(viewerId);
@@ -952,21 +1073,35 @@ const postController = {
         timestamp: new Date().toISOString()
       };
 
-      // 原子前插：$push + $position:0。
-      // 原实现是「读全量 comments → unshift → 整体覆盖写」，两个用户同时评论会互相覆盖（丢评论）。
-      // $position:0 与旧行为的顺序一致（新评论在最前）；最后再用一次条件更新兜住「读取后被删帖」的竞态。
-      const appended = await Post.findOneAndUpdate(
-        { id: postId, isDeleted: { $ne: true } },
-        { $push: { comments: { $each: [newComment], $position: 0 } } },
-        { returnDocument: 'after', projection: { id: 1 } }
-      ).lean();
+      // 写入独立集合：单文档 insert 天然原子，不会再出现
+      // 「两个用户同时评论、后写者抹掉前者」的问题。
+      await Comment.create({
+        id: newComment.id,
+        postId,
+        parentId: null,
+        depth: 1,
+        userId,
+        username: newComment.username,
+        content: newComment.content,
+        anonymous: isAnonymous,
+        images: commentImages,
+        timestamp: new Date(newComment.timestamp)
+      });
 
-      if (!appended) {
+      // 帖子级评论计数（列表排序与卡片显示用），与用户级计数各自原子自增
+      const counted = await Post.updateOne(
+        { id: postId, isDeleted: { $ne: true } },
+        { $inc: { commentCount: 1 } }
+      );
+
+      if (!counted || counted.matchedCount === 0) {
+        // 帖子在写入评论后、计数前被删：回滚刚写入的评论，避免留下孤儿数据
+        await Comment.deleteOne({ id: newComment.id });
         logger.logWarn('添加评论失败：帖子已被删除', { postId, userId });
         return res.status(404).json(generateErrorResponse('帖子不存在'));
       }
 
-      // 清除帖子缓存
+            // 清除帖子缓存
       await postCache.delete(postId);
 
       // 更新用户评论数（原子自增，见 adjustUserCommentCount）
@@ -991,174 +1126,77 @@ const postController = {
     }
   },
 
-  // 删除评论
+  // 删除评论（顶层评论 / 回复 / 嵌套回复统一处理）
   async deleteComment(req, res) {
     try {
       const { id: postId, commentId } = req.params;
+      const { replyId, nestedReplyId } = req.body;
       // userId 来自已认证的 JWT，防止客户端伪造
       const userId = req.user.id;
-      const { replyId, nestedReplyId } = req.body;
-      
+
       const post = await getPostById(postId);
-      
       if (!post || post.isDeleted) {
         return res.status(404).json(generateErrorResponse('帖子不存在'));
       }
-      
-      const comments = post.comments || [];
-      // 乐观并发基准：写入前要求 commentsVersion 未变（$size 检测不到 replies）
-      const commentsVersionBeforeEdit = post.commentsVersion || 0;
-      const commentIndex = comments.findIndex(c => c.id === commentId);
-      
-      if (commentIndex === -1) {
-        return res.status(404).json(generateErrorResponse('评论不存在'));
-      }
-      
-      const comment = comments[commentIndex];
-      
-      // 如果提供了 nestedReplyId，则删除嵌套回复（二级回复）
-      if (nestedReplyId) {
-        if (!replyId) {
-          return res.status(400).json(generateErrorResponse('必须提供 replyId'));
-        }
-        
-        if (!comment.replies || !Array.isArray(comment.replies)) {
-          return res.status(404).json(generateErrorResponse('回复不存在'));
-        }
-        
-        const parentReply = comment.replies.find(r => r.id === replyId);
-        if (!parentReply) {
-          return res.status(404).json(generateErrorResponse('回复不存在'));
-        }
-        
-        if (!parentReply.replies || !Array.isArray(parentReply.replies)) {
-          return res.status(404).json(generateErrorResponse('嵌套回复不存在'));
-        }
-        
-        const nestedReplyIndex = parentReply.replies.findIndex(r => r.id === nestedReplyId);
-        if (nestedReplyIndex === -1) {
-          return res.status(404).json(generateErrorResponse('嵌套回复不存在'));
-        }
-        
-        const nestedReply = parentReply.replies[nestedReplyIndex];
-        
-        // 检查权限：只有嵌套回复作者或帖子作者可以删除
-        if (nestedReply.userId !== userId && post.userId !== userId) {
-          return res.status(403).json(generateErrorResponse('无权限删除此回复'));
-        }
-        
-        parentReply.replies.splice(nestedReplyIndex, 1);
-        const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
-        if (!commentWriteOk) {
-          await postCache.delete(postId);
-          return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
-        }
-        
-        // 清除帖子缓存
-        await postCache.delete(postId);
 
-        // 递减被删回复作者的评论数（回复在 addReply 里会 +1，此前删除侧从不扣减）
-        await adjustUserCommentCount(nestedReply.userId, -1);
-
-        // 清理该回复附带的图片文件（记录已删，文件不该留在 public/images 当垃圾）
-        const { removeImageFiles } = require('../middleware/uploadMiddleware');
-        await removeImageFiles(nestedReply.images || []);
-
-        return res.json(generateSuccessResponse({}, '嵌套回复删除成功'));
-      }
-      
-      // 如果提供了 replyId，则删除回复（一级回复）
-      if (replyId) {
-        if (!comment.replies || !Array.isArray(comment.replies)) {
-          return res.status(404).json(generateErrorResponse('回复不存在'));
-        }
-        
-        const replyIndex = comment.replies.findIndex(r => r.id === replyId);
-        if (replyIndex === -1) {
-          return res.status(404).json(generateErrorResponse('回复不存在'));
-        }
-        
-        const reply = comment.replies[replyIndex];
-        
-        // 检查权限：只有回复作者或帖子作者可以删除回复
-        if (reply.userId !== userId && post.userId !== userId) {
-          return res.status(403).json(generateErrorResponse('无权限删除此回复'));
-        }
-
-        // 级联删除：该回复下的嵌套回复一并删除（此前只删父级，子回复会成为永远读不到的孤儿数据）
-        const orphanNested = Array.isArray(reply.replies) ? reply.replies.slice() : [];
-
-        comment.replies.splice(replyIndex, 1);
-        const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
-        if (!commentWriteOk) {
-          await postCache.delete(postId);
-          return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
-        }
-        
-        // 清除帖子缓存
-        await postCache.delete(postId);
-
-        // 递减被删回复作者的评论数
-        await adjustUserCommentCount(reply.userId, -1);
-        for (const orphan of orphanNested) {
-          await adjustUserCommentCount(orphan.userId, -1);
-        }
-        if (orphanNested.length > 0) {
-          logger.logInfo('删除回复时级联清理嵌套回复', { postId, replyId, cascaded: orphanNested.length });
-        }
-
-        // 清理被删回复及其嵌套回复的图片文件
-        const { removeImageFiles } = require('../middleware/uploadMiddleware');
-        await removeImageFiles([
-          ...(reply.images || []),
-          ...orphanNested.flatMap(o => o.images || [])
-        ]);
-
-        return res.json(generateSuccessResponse({}, '回复删除成功'));
-      }
-      
-      // 否则删除评论
-      // 检查权限：只有评论作者或帖子作者可以删除评论
-      if (!canDeleteComment(comment, post, userId)) {
-        return res.status(403).json(generateErrorResponse('无权限删除此评论'));
+      // 定位目标：三者都是 Comment 文档的唯一 id，取最具体的一个。
+      // 旧实现要在嵌套数组里按 commentId → replyId → nestedReplyId 逐层找，
+      // 拆成独立集合后一次查询即可，也不再需要「三级分支」。
+      const targetId = nestedReplyId || replyId || commentId;
+      if (!targetId) {
+        return res.status(400).json(generateErrorResponse('缺少评论标识'));
       }
 
-      // 级联删除：该评论下的所有回复与嵌套回复一并删除（否则成为永远读不到的孤儿数据）
-      const cascadedAuthors = [];
-      const cascadedImages = [];
-      for (const r of (Array.isArray(comment.replies) ? comment.replies : [])) {
-        cascadedAuthors.push(r.userId);
-        if (Array.isArray(r.images)) cascadedImages.push(...r.images);
-        for (const n of (Array.isArray(r.replies) ? r.replies : [])) {
-          cascadedAuthors.push(n.userId);
-          if (Array.isArray(n.images)) cascadedImages.push(...n.images);
-        }
+      const target = await Comment.findOne({ id: targetId, postId }).lean();
+      if (!target || target.isDeleted) {
+        const notFoundMsg = nestedReplyId ? '嵌套回复不存在' : (replyId ? '回复不存在' : '评论不存在');
+        return res.status(404).json(generateErrorResponse(notFoundMsg));
       }
 
-      comments.splice(commentIndex, 1);
-      const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
-      if (!commentWriteOk) {
-        await postCache.delete(postId);
-        return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
+      // 权限：作者本人或帖子作者
+      if (target.userId !== userId && post.userId !== userId) {
+        return res.status(403).json(generateErrorResponse(
+          target.depth > 1 ? '无权限删除此回复' : '无权限删除此评论'
+        ));
       }
-      
+
+      // 级联：目标本身 + 全部后代一并软删（否则后代成为永远读不到的孤儿数据）
+      const subtreeIds = await collectSubtreeIds(postId, targetId);
+      const affected = await Comment.find({ postId, id: { $in: subtreeIds } })
+        .select('id userId images')
+        .lean();
+
+      await Comment.updateMany(
+        { postId, id: { $in: subtreeIds } },
+        { $set: { isDeleted: true } }
+      );
+
+      // 帖子级计数一次性回减整棵子树
+      await Post.updateOne({ id: postId }, { $inc: { commentCount: -affected.length } });
+      // 兜底：计数不会小于 0（历史数据或重复删除时触发）
+      await Post.updateOne({ id: postId, commentCount: { $lt: 0 } }, { $set: { commentCount: 0 } });
+
+      // 用户级计数按作者聚合后回减（同一人可能有多条评论在子树里）
+      const perUser = new Map();
+      for (const d of affected) {
+        perUser.set(d.userId, (perUser.get(d.userId) || 0) + 1);
+      }
+      for (const [uid, n] of perUser) {
+        await adjustUserCommentCount(uid, -n);
+      }
+
+      // 清理被删内容的图片文件
+      const { removeImageFiles } = require('../middleware/uploadMiddleware');
+      await removeImageFiles(affected.flatMap(d => d.images || []));
+
       // 清除帖子缓存
       await postCache.delete(postId);
 
-      // 递减被删评论作者的评论数（此前只增不减，commentCount 会持续虚高）
-      await adjustUserCommentCount(comment.userId, -1);
-      for (const uid of cascadedAuthors) {
-        await adjustUserCommentCount(uid, -1);
-      }
-      if (cascadedAuthors.length > 0) {
-        logger.logInfo('删除评论时级联清理回复', { postId, commentId, cascaded: cascadedAuthors.length });
+      if (affected.length > 1) {
+        logger.logInfo('删除评论时级联清理子树', { postId, targetId, cascaded: affected.length - 1 });
       }
 
-      // 清理被删评论及其级联回复的图片文件
-      const { removeImageFiles } = require('../middleware/uploadMiddleware');
-      await removeImageFiles([...(comment.images || []), ...cascadedImages]);
-
-      res.json(generateSuccessResponse({}, '评论删除成功'));
+      res.json(generateSuccessResponse({}, target.depth === 1 ? '评论删除成功' : '回复删除成功'));
     } catch (error) {
       logger.logError('删除评论失败', { error: error.message, postId: req.params.id, commentId: req.params.commentId });
       res.status(500).json(generateErrorResponse('服务器内部错误', 500));
@@ -1385,16 +1423,6 @@ const postController = {
         return res.status(403).json(generateErrorResponse(denyReasonReply));
       }
 
-      const comments = post.comments || [];
-      // 乐观并发基准：写入前要求 commentsVersion 未变（$size 检测不到 replies）
-      const commentsVersionBeforeEdit = post.commentsVersion || 0;
-      const commentIndex = comments.findIndex(c => c.id === commentId);
-      
-      if (commentIndex === -1) {
-        return res.status(404).json(generateErrorResponse('评论不存在'));
-      }
-      
-      const comment = comments[commentIndex];
       const isAnonymous = anonymous === true || anonymous === 'true';
       
       // 处理上传的图片
@@ -1410,7 +1438,7 @@ const postController = {
         }
       }
       
-      // 创建回复
+      // 先构造返回体：id 在此生成，写入与响应共用同一份数据
       const newReply = {
         id: uuidv4(),
         userId,
@@ -1418,79 +1446,66 @@ const postController = {
         content: sanitizeHtml(content || ''),
         anonymous: isAnonymous,
         images: replyImages,
-        replyTo: replyToId || null,
+        replyToId: replyToId || null,
         timestamp: new Date().toISOString()
       };
-      
-      // 查找回复的辅助函数（返回 { node, depth }，评论为第1层、第一层回复为第2层…）
-      const findReplyWithDepth = (replies, targetId, currentDepth) => {
-        if (!replies || !Array.isArray(replies)) {
-          return null;
-        }
-        
-        for (let reply of replies) {
-          if (reply.id === targetId) {
-            return { node: reply, depth: currentDepth };
-          }
-          if (reply.replies && reply.replies.length > 0) {
-            const found = findReplyWithDepth(reply.replies, targetId, currentDepth + 1);
-            if (found) {
-              return found;
-            }
-          }
-        }
-        
-        return null;
-      };
-      
-      let targetUserId = comment.userId; // 默认通知评论作者
-      let replyToUsername = null;
-      
-      // 如果回复的是回复
+
+      // 定位被回复的节点（顶层评论或任意层级的回复），确定 parentId 与 depth。
+      // 旧实现要在嵌套数组里逐层找 replyToId 并手工计算深度，
+      // 拆成独立集合后每个节点自带 depth，一次查询即可。
+      const parentTarget = replyToId
+        ? await Comment.findOne({ id: replyToId, postId, isDeleted: { $ne: true } }).lean()
+        : await Comment.findOne({ id: commentId, postId, isDeleted: { $ne: true } }).lean();
+
+      if (!parentTarget) {
+        return res.status(404).json(generateErrorResponse(
+          replyToId ? '被回复的回复不存在' : '评论不存在'
+        ));
+      }
+
+      const newDepth = (parentTarget.depth || 1) + 1;
+      if (newDepth > MAX_REPLY_DEPTH) {
+        logger.logWarn('回复评论失败：超过嵌套深度限制', {
+          postId, commentId, replyToId, depth: newDepth, maxDepth: MAX_REPLY_DEPTH
+        });
+        return res.status(400).json(generateErrorResponse(`嵌套回复最多支持 ${MAX_REPLY_DEPTH} 层`));
+      }
+
+      const targetUserId = parentTarget.userId;
+      const replyToUsername = parentTarget.username;
+
       if (replyToId) {
-        const found = findReplyWithDepth(comment.replies, replyToId, 2); // 第一层回复深度=2
-        if (!found) {
-          return res.status(404).json(generateErrorResponse('被回复的回复不存在'));
-        }
-        const targetReply = found.node;
-        
-        // 嵌套深度限制：新回复深度 = 目标深度 + 1，不得超过 MAX_REPLY_DEPTH
-        if (found.depth + 1 > MAX_REPLY_DEPTH) {
-          logger.logWarn('回复评论失败：超过嵌套深度限制', {
-            postId, commentId, replyToId, depth: found.depth + 1, maxDepth: MAX_REPLY_DEPTH
-          });
-          return res.status(400).json(generateErrorResponse(`嵌套回复最多支持 ${MAX_REPLY_DEPTH} 层`));
-        }
-        
-        targetUserId = targetReply.userId; // 通知被回复的回复作者
-        replyToUsername = targetReply.username; // 设置被回复的用户名
-        
-        // 设置 replyToId 和 replyToUsername
         newReply.replyToId = replyToId;
         newReply.replyToUsername = replyToUsername;
-        
-        // 直接将新回复添加到被回复的回复的回复列表中
-        if (!targetReply.replies) {
-          targetReply.replies = [];
-        }
-        targetReply.replies.push(newReply);
-      } else {
-        // 回复评论，添加到评论的回复列表中（深度2，不会超限）
-        if (!comment.replies) {
-          comment.replies = [];
-        }
-        comment.replies.push(newReply);
       }
-      
-      const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
-      
-      if (!commentWriteOk) {
-      
-        await postCache.delete(postId);
-      
-        return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
-      
+
+      // 写入独立集合：单文档 insert，天然原子
+      await Comment.create({
+        id: newReply.id,
+        postId,
+        parentId: parentTarget.id,
+        depth: newDepth,
+        userId,
+        username: newReply.username,
+        content: newReply.content,
+        anonymous: isAnonymous,
+        images: replyImages,
+        replyToId: replyToId || null,
+        replyToUsername: replyToId ? replyToUsername : null,
+        timestamp: new Date(newReply.timestamp)
+      });
+
+      const counted = await Post.updateOne(
+        { id: postId, isDeleted: { $ne: true } },
+        { $inc: { commentCount: 1 } }
+      );
+
+      if (!counted || counted.matchedCount === 0) {
+        await Comment.deleteOne({ id: newReply.id });
+        logger.logWarn('回复评论失败：帖子已被删除', { postId, userId });
+        return res.status(404).json(generateErrorResponse('帖子不存在'));
       }
+
       // 清除帖子缓存（缺了它，后续 GET 会命中旧缓存：新回复看不到、评论点赞态回退）
       await postCache.delete(postId);
       
@@ -1518,187 +1533,14 @@ const postController = {
 
   // 点赞评论
   async likeComment(req, res) {
-    try {
-      const { id: postId, commentId } = req.params;
-      // userId 来自已认证的 JWT，防止客户端伪造
-      const userId = req.user.id;
-
-      const post = await getPostById(postId);
-
-      if (!post || post.isDeleted) {
-        return res.status(404).json(generateErrorResponse('帖子不存在'));
-      }
-
-      // 递归查找评论或回复
-      const findCommentOrReply = (comments, targetId) => {
-        for (const comment of comments) {
-          if (comment.id === targetId) {
-            return comment;
-          }
-          if (comment.replies && comment.replies.length > 0) {
-            const found = findCommentOrReply(comment.replies, targetId);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-
-      const comments = post.comments || [];
-      // 乐观并发基准：写入前要求 commentsVersion 未变（$size 检测不到 replies）
-      const commentsVersionBeforeEdit = post.commentsVersion || 0;
-      const targetComment = findCommentOrReply(comments, commentId);
-
-      if (!targetComment) {
-        return res.status(404).json(generateErrorResponse('评论不存在'));
-      }
-
-      const likedBy = targetComment.likedBy || [];
-      const userIndex = likedBy.indexOf(userId);
-
-      let newLikes, newLikedBy, liked;
-
-      if (userIndex !== -1) {
-        // 取消点赞
-        newLikes = Math.max(0, (targetComment.likes || 0) - 1);
-        newLikedBy = likedBy.filter(id => id !== userId);
-        liked = false;
-      } else {
-        // 添加点赞
-        newLikes = (targetComment.likes || 0) + 1;
-        newLikedBy = [...likedBy, userId];
-        liked = true;
-
-        // 创建点赞通知
-        if (targetComment.userId !== userId) {
-          notificationController.createCommentLikeNotification(postId, commentId, userId, targetComment.userId);
-        }
-      }
-
-      targetComment.likes = newLikes;
-      targetComment.likedBy = newLikedBy;
-
-      const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
-
-      if (!commentWriteOk) {
-
-        await postCache.delete(postId);
-
-        return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
-
-      }
-
-      // 清除帖子缓存（缺了它，后续 GET 会命中旧缓存：新回复看不到、评论点赞态回退）
-      await postCache.delete(postId);
-
-      logger.logUserAction(liked ? '点赞评论' : '取消点赞评论', userId, null, {
-        postId,
-        commentId,
-        likes: newLikes
-      });
-
-      res.json(generateSuccessResponse({
-        likes: newLikes,
-        liked: liked
-      }, liked ? '点赞成功' : '取消点赞成功'));
-    } catch (error) {
-      logger.logError('点赞评论失败', { error: error.message, postId: req.params.id, commentId: req.params.commentId });
-      res.status(500).json(generateErrorResponse('服务器内部错误', 500));
-    }
+    return toggleCommentLike(req, res, req.params.commentId, '评论');
   },
 
   // 点赞/取消点赞回复（嵌套回复任意层级）
+  // 与评论点赞走同一套原子实现，只是目标 id 换成 replyId
   async likeReply(req, res) {
-    try {
-      const { id: postId, commentId, replyId } = req.params;
-      // userId 来自已认证的 JWT，防止客户端伪造
-      const userId = req.user.id;
-
-      const post = await getPostById(postId);
-
-      if (!post || post.isDeleted) {
-        return res.status(404).json(generateErrorResponse('帖子不存在'));
-      }
-
-      // 在指定评论的回复树中递归查找回复
-      const findReplyNode = (replies) => {
-        if (!replies || !Array.isArray(replies)) return null;
-        for (const r of replies) {
-          if (r.id === replyId) return r;
-          if (r.replies && r.replies.length > 0) {
-            const found = findReplyNode(r.replies);
-            if (found) return found;
-          }
-        }
-        return null;
-      };
-
-      const comments = post.comments || [];
-      // 乐观并发基准：写入前要求 commentsVersion 未变（$size 检测不到 replies）
-      const commentsVersionBeforeEdit = post.commentsVersion || 0;
-      const comment = comments.find(c => c.id === commentId);
-      if (!comment) {
-        return res.status(404).json(generateErrorResponse('评论不存在'));
-      }
-
-      const targetReply = findReplyNode(comment.replies);
-      if (!targetReply) {
-        return res.status(404).json(generateErrorResponse('回复不存在'));
-      }
-
-      const likedBy = targetReply.likedBy || [];
-      const userIndex = likedBy.indexOf(userId);
-
-      let newLikes, newLikedBy, liked;
-
-      if (userIndex !== -1) {
-        // 取消点赞
-        newLikes = Math.max(0, (targetReply.likes || 0) - 1);
-        newLikedBy = likedBy.filter(id => id !== userId);
-        liked = false;
-      } else {
-        // 添加点赞
-        newLikes = (targetReply.likes || 0) + 1;
-        newLikedBy = [...likedBy, userId];
-        liked = true;
-
-        // 回复点赞通知（复用评论点赞通知，递归可定位到回复）
-        if (targetReply.userId !== userId) {
-          notificationController.createCommentLikeNotification(postId, replyId, userId, targetReply.userId);
-        }
-      }
-
-      targetReply.likes = newLikes;
-      targetReply.likedBy = newLikedBy;
-
-      const commentWriteOk = await writeCommentsGuarded(postId, commentsVersionBeforeEdit, comments);
-
-      if (!commentWriteOk) {
-
-        await postCache.delete(postId);
-
-        return res.status(409).json(generateErrorResponse('评论已被他人修改，请刷新后重试'));
-
-      }
-
-      // 清除帖子缓存（缺了它，后续 GET 会命中旧缓存：新回复看不到、评论点赞态回退）
-      await postCache.delete(postId);
-
-      logger.logUserAction(liked ? '点赞回复' : '取消点赞回复', userId, null, {
-        postId,
-        commentId,
-        replyId,
-        likes: newLikes
-      });
-
-      res.json(generateSuccessResponse({
-        likes: newLikes,
-        liked: liked
-      }, liked ? '点赞成功' : '取消点赞成功'));
-    } catch (error) {
-      logger.logError('点赞回复失败', { error: error.message, postId: req.params.id, commentId: req.params.commentId, replyId: req.params.replyId });
-      res.status(500).json(generateErrorResponse('服务器内部错误', 500));
-    }
-  },
+    return toggleCommentLike(req, res, req.params.replyId, '回复');
+  }
 };
 
 module.exports = postController;

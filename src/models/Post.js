@@ -178,6 +178,13 @@ const PostSchema = new Schema({
     type: Number,
     default: 0
   },
+
+  // 评论总数（评论已拆分到独立集合 comments，这里是冗余计数，
+  // 用于列表排序与卡片显示，避免为拿计数而查 comments 集合）
+  commentCount: {
+    type: Number,
+    default: 0
+  },
   viewCount: {
     type: Number,
     default: 0

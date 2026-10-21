@@ -15,6 +15,8 @@ const {
   createNotification
 } = require('../utils/dataUtils');
 const { v4: uuidv4 } = require('uuid');
+const Comment = require('../models/Comment');
+const { collectSubtreeIds } = require('../utils/commentUtils');
 const {
   generateErrorResponse,
   generateSuccessResponse
@@ -563,18 +565,25 @@ const adminController = {
         return res.status(404).json(generateErrorResponse('帖子不存在'));
       }
 
-      const comments = post.comments || [];
-      const commentIndex = comments.findIndex(c => c.id === commentId);
-      
-      if (commentIndex === -1) {
+      // 评论已拆到独立集合：按 id 直查，并连同其全部后代一起软删
+      const deletedComment = await Comment.findOne({ id: commentId, postId, isDeleted: { $ne: true } }).lean();
+
+      if (!deletedComment) {
         return res.status(404).json(generateErrorResponse('评论不存在'));
       }
-      
-      const deletedComment = comments[commentIndex];
-      
-      // 删除评论
-      comments.splice(commentIndex, 1);
-      await updatePost(postId, { comments });
+
+      const adminSubtreeIds = await collectSubtreeIds(postId, commentId);
+      const adminAffected = await Comment.find({ postId, id: { $in: adminSubtreeIds } })
+        .select('id userId images').lean();
+
+      await Comment.updateMany(
+        { postId, id: { $in: adminSubtreeIds } },
+        { $set: { isDeleted: true } }
+      );
+
+      // 帖子级计数回减整棵子树
+      await Post.updateOne({ id: postId }, { $inc: { commentCount: -adminAffected.length } });
+      await Post.updateOne({ id: postId, commentCount: { $lt: 0 } }, { $set: { commentCount: 0 } });
       
       // 更新用户评论数
       const user = await getUserById(deletedComment.userId);

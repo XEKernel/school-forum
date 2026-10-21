@@ -10,6 +10,7 @@ const {
   getUserById,
   getPostById
 } = require('../utils/dataUtils');
+const Comment = require('../models/Comment');
 const { 
   generateErrorResponse,
   generateSuccessResponse
@@ -294,8 +295,8 @@ const notificationController = {
         return;
       }
       
-      // 查找被回复的评论
-      const comment = post.comments && post.comments.find(c => c.id === commentId);
+      // 查找被回复的评论（评论已拆到独立集合，直接按 id 查）
+      const comment = await Comment.findOne({ id: commentId, postId, isDeleted: { $ne: true } }).lean();
       if (!comment) {
         return;
       }
@@ -373,7 +374,8 @@ const notificationController = {
         return null;
       };
       
-      const comment = post.comments && findComment(post.comments, commentId);
+      // 评论已拆到独立集合：按 id 直查，不必再在嵌套树里递归
+      const comment = await Comment.findOne({ id: commentId, postId, isDeleted: { $ne: true } }).lean();
       if (!comment) {
         return;
       }

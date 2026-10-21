@@ -23,7 +23,55 @@ async function loadCommentTree(postId) {
     .sort({ timestamp: 1 })
     .lean();
 
-  if (!docs.length) return [];
+  return buildTree(docs);
+}
+
+/**
+ * 批量组装多个帖子的评论树（列表接口用）。
+ * 一次查询取出本页所有帖子的评论，避免按帖子逐个查造成 N+1。
+ *
+ * @param {string[]} postIds
+ * @returns {Promise<Map<string, Array>>} postId → 评论树
+ */
+async function loadCommentTrees(postIds) {
+  const result = new Map();
+  if (!Array.isArray(postIds) || postIds.length === 0) return result;
+
+  const docs = await Comment.find({ postId: { $in: postIds }, isDeleted: { $ne: true } })
+    .sort({ timestamp: 1 })
+    .lean();
+
+  const grouped = new Map();
+  for (const d of docs) {
+    if (!grouped.has(d.postId)) grouped.set(d.postId, []);
+    grouped.get(d.postId).push(d);
+  }
+
+  for (const pid of postIds) {
+    result.set(pid, buildTree(grouped.get(pid) || []));
+  }
+  return result;
+}
+
+/**
+ * 递归统计树中的节点总数（评论 + 所有层级回复）。
+ */
+function countTreeNodes(tree) {
+  if (!Array.isArray(tree)) return 0;
+  let n = 0;
+  for (const node of tree) {
+    n += 1;
+    if (node && Array.isArray(node.replies)) n += countTreeNodes(node.replies);
+  }
+  return n;
+}
+
+/**
+ * 由扁平文档列表构建嵌套树。
+ * 输出结构与旧的内嵌数组逐字段一致：顶层按时间倒序、回复按时间正序。
+ */
+function buildTree(docs) {
+  if (!docs || !docs.length) return [];
 
   const map = new Map();
   for (const d of docs) {
@@ -155,6 +203,8 @@ function flattenLegacyComments(postId, comments) {
 module.exports = {
   MAX_REPLY_DEPTH,
   loadCommentTree,
+  loadCommentTrees,
+  countTreeNodes,
   collectSubtreeIds,
   countComments,
   flattenLegacyComments

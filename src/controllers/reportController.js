@@ -17,6 +17,8 @@ const logger = require('../utils/logger');
 const notificationController = require('./notificationController');
 const Post = require('../models/Post');
 const User = require('../models/User');
+const Comment = require('../models/Comment');
+const { collectSubtreeIds } = require('../utils/commentUtils');
 
 // 举报类型
 const REPORT_TYPES = {
@@ -93,20 +95,16 @@ const reportController = {
           return null;
         };
 
+        // 评论已拆到独立集合：一次按 id 直查，无需遍历所有帖子再递归找
+        const reportedComment = await Comment.findOne({ id: targetId, isDeleted: { $ne: true } }).lean();
         let foundComment = false;
-        for (const post of posts) {
-          if (post.comments) {
-            const comment = findCommentOrReply(post.comments, targetId);
-            if (comment) {
-              targetContent = comment.content;
-              targetUserId = comment.userId;
-              targetUsername = comment.username || '匿名用户';
-              postId = post.id;
-              commentId = targetId;
-              foundComment = true;
-              break;
-            }
-          }
+        if (reportedComment) {
+          targetContent = reportedComment.content;
+          targetUserId = reportedComment.userId;
+          targetUsername = reportedComment.username || '匿名用户';
+          postId = reportedComment.postId;
+          commentId = targetId;
+          foundComment = true;
         }
         if (!foundComment) {
           return res.status(404).json(generateErrorResponse('评论不存在'));
@@ -373,13 +371,22 @@ const reportController = {
               return false;
             };
 
-            for (const post of posts) {
-              if (post.comments) {
-                if (removeCommentOrReply(post.comments, report.targetId)) {
-                  await updatePost(post.id, { comments: post.comments });
-                  break;
-                }
-              }
+            // 评论已拆到独立集合：定位后连同后代一起软删，并回减帖子计数
+            const flaggedComment = await Comment.findOne({ id: report.targetId }).lean();
+            if (flaggedComment) {
+              const flaggedIds = await collectSubtreeIds(flaggedComment.postId, report.targetId);
+              await Comment.updateMany(
+                { postId: flaggedComment.postId, id: { $in: flaggedIds } },
+                { $set: { isDeleted: true } }
+              );
+              await Post.updateOne(
+                { id: flaggedComment.postId },
+                { $inc: { commentCount: -flaggedIds.length } }
+              );
+              await Post.updateOne(
+                { id: flaggedComment.postId, commentCount: { $lt: 0 } },
+                { $set: { commentCount: 0 } }
+              );
             }
           }
 

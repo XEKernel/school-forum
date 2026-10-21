@@ -277,10 +277,12 @@ async function postExists(postId) {
  * @returns {Promise<boolean>}
  */
 async function commentExists(postId, commentId) {
-  const { getPostById } = require('./dataUtils');
-  const post = await getPostById(postId);
-  if (!post || !post.comments) return false;
-  return post.comments.some(c => c.id === commentId);
+  // 评论已拆到独立集合：直接按 (id, postId) 查文档，
+  // 原实现要把整棵嵌套评论树读出来再线性查找。
+  if (!postId || !commentId) return false;
+  const Comment = require('../models/Comment');
+  const count = await Comment.countDocuments({ id: commentId, postId, isDeleted: { $ne: true } });
+  return count > 0;
 }
 
 /**
