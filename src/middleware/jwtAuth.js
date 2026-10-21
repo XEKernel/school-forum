@@ -3,6 +3,7 @@
  * 提供用户和管理员的 Token 认证
  */
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { JWT_CONFIG, ADMIN_JWT_CONFIG, getDynamicLoginSecurity } = require('../config/security');
 const { getRedisClient } = require('../utils/redisUtils');
 const logger = require('../utils/logger');
@@ -34,7 +35,11 @@ function generateRefreshToken(userId) {
   return jwt.sign(
     { 
       userId,
-      type: 'refresh'
+      type: 'refresh',
+      // jti 是必需的唯一标识：JWT 的 payload 与 iat 都只精确到秒，
+      // 同一秒内两次签发会得到完全相同的字符串。启用轮换后这意味着
+      // 「把旧 token 加入黑名单」会连刚落生的新 token 一起拉黑，用户直接掉登录。
+      jti: crypto.randomUUID()
     },
     JWT_CONFIG.secret,
     {

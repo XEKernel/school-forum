@@ -1354,7 +1354,10 @@ const userController = {
   // 刷新访问令牌
   async refreshToken(req, res) {
     try {
-      const { extractToken, verifyToken, generateAccessToken, setAuthCookies } = require('../middleware/jwtAuth');
+      const {
+        extractToken, verifyToken, generateAccessToken, generateRefreshToken,
+        setAuthCookies, invalidateToken
+      } = require('../middleware/jwtAuth');
 
       // 令牌来源：请求体（API 客户端）→ HttpOnly Cookie（浏览器端不持有 refresh 原文）
       const refreshToken = req.body?.refreshToken || extractToken(req, 'refresh');
@@ -1407,13 +1410,24 @@ const userController = {
         qq: user.qq
       });
 
-      // 刷新成功后同步更新 Cookie 里的 access token（浏览器端无需自行存储）
+      // ---- refresh token 轮换 ----
+      // 原先 refresh 只换 access，refresh 本身长期不变：一旦泄露，攻击者可以在
+      // 整个有效期（30 天）内反复换取新 access，而真正的用户毫不知情。
+      // 现在每次刷新都签发新的 refresh，并把旧的加入黑名单（TTL = 其剩余有效期），
+      // 于是每个 refresh 只能用一次 —— 被截获的令牌在正常用户刷新一次后即失效。
+      //
+      // 兼容性：Android 客户端已同步改为接收并保存响应体里的 refreshToken，
+      // 否则下一次刷新会拿旧 token 撞黑名单导致掉登录。
+      const newRefreshToken = generateRefreshToken(user.id);
+      await invalidateToken(refreshToken);
+
+      // 刷新成功后同步更新 Cookie 里的令牌（浏览器端无需自行存储）
       const { isApiClient } = require('../middleware/jwtAuth');
-      setAuthCookies(req, res, { accessToken: newAccessToken });
+      setAuthCookies(req, res, { accessToken: newAccessToken, refreshToken: newRefreshToken });
 
       // 仅原生客户端从响应体取新令牌；浏览器侧已通过 Cookie 更新
       res.json(generateSuccessResponse(
-        isApiClient(req) ? { token: newAccessToken } : {},
+        isApiClient(req) ? { token: newAccessToken, refreshToken: newRefreshToken } : {},
         '令牌刷新成功'
       ));
     } catch (error) {
