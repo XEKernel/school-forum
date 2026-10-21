@@ -91,6 +91,26 @@ const NotificationSchema = new Schema({
     type: String,
     default: null
   },
+  // 以下 4 个字段在 controller 里会被写入，但此前 schema 未声明，
+  // Mongoose strict 模式下被静默丢弃 —— 写入成功但值永远读不回来。
+  // postTitle 影响最直接：message.js / m-msg.js 共 5 处渲染「帖子标题」，
+  // 因为库里没有这个字段，通知里的标题一直是空的。
+  postTitle: {
+    type: String,
+    default: null
+  },
+  adminName: {
+    type: String,
+    default: null
+  },
+  banEndTime: {
+    type: Date,
+    default: null
+  },
+  targetContent: {
+    type: String,
+    default: null
+  },
   // 通用字段
   timestamp: {
     type: Date,
