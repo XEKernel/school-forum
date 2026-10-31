@@ -893,23 +893,9 @@ EOF
 
     if [[ "$overwrite_config" == "true" ]] && is_interactive && [[ "$do_interactive_config" == "true" ]]; then
         print_section "管理员配置"
-        echo "请输入管理员 QQ 号（每行一个，输入空行结束）："
-        local admin_users=()
-        while true; do
-            prompt_read qq "QQ号: " ""
-            if [[ -z "$qq" ]]; then
-                break
-            elif validate_qq "$qq"; then
-                admin_users+=("$qq")
-            else
-                log_warn "无效 QQ 号，请重新输入 (5-15位数字)"
-            fi
-        done
-        if [[ ${#admin_users[@]} -eq 0 ]]; then
-            add_missing "管理员 QQ 号未配置，请编辑 data/config.json 中的 adminUsers 数组"
-        else
-            admin_users_json=$(printf '%s\n' "${admin_users[@]}" | jq -R . | jq -s .)
-        fi
+        # 安全：QQ 可被注册/改绑，不能作为管理员授权来源。部署完成后用
+        # `node scripts/promote-admin.js <QQ或用户ID>` 把已注册账号提升为管理员。
+        log_info "管理员不再预写 QQ 白名单；部署完成后请先注册，再运行 scripts/promote-admin.js 提权"
 
         print_section "学校配置"
         local schools=()
@@ -973,14 +959,13 @@ EOF
                 fi
             done
             if [[ ${#valid_qqs[@]} -gt 0 ]]; then
-                admin_users_json=$(printf '%s\n' "${valid_qqs[@]}" | jq -R . | jq -s .)
-                log_info "已从环境变量 SCHOOL_FORUM_ADMIN_QQ 预填 ${#valid_qqs[@]} 个管理员"
+                log_info "已读取 SCHOOL_FORUM_ADMIN_QQ，但管理员改为注册后提权，不再写入 QQ 白名单（请运行 scripts/promote-admin.js）"
             fi
         fi
         if is_interactive; then
             log_info "已跳过学校与管理员配置，可稍后编辑 data/config.json"
         else
-            add_missing "管理员与学校信息未配置（非交互模式自动跳过），可手动编辑 data/config.json 中的 adminUsers / schools"
+            add_missing "管理员与学校信息未配置（非交互模式自动跳过）：管理员请注册后运行 node scripts/promote-admin.js <QQ或用户ID>；学校可编辑 data/config.json 的 schools"
         fi
     fi
 
@@ -1042,7 +1027,7 @@ EOF
             fi
         fi
         if [[ "$admin_users_json" == "[]" ]]; then
-            log_warn "未配置管理员，请稍后手动编辑 data/config.json 添加 adminUsers"
+            log_warn "管理员未配置：请注册账号后运行 node scripts/promote-admin.js <QQ或用户ID>"
         fi
     else
         log_info "保留现有 data/config.json 文件"

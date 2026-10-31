@@ -737,7 +737,7 @@ const favoritesManager = {
       // 正常帖子（转义防 XSS；修正编码损坏的"未知用户"）
       const displayUsername = post.anonymous ? '匿名用户' : this.escapeHtml(post.username || '未知用户');
       const esc = (s) => this.escapeHtml(s);
-      const preview = this.getPostPreview(post.content, 150);
+      const preview = this.escapeHtml(this.getPostPreview(post.content, 150));
       
       // 获取标签信息
       const tag = post.tagId ? this.tags.find(t => t._id === post.tagId) : null;

@@ -69,7 +69,7 @@ const utils = {
         <i class="fas ${iconMap[type] || iconMap.info}"></i>
       </div>
       <div class="notification-body">
-        <span>${message}</span>
+        <span>${utils.escapeHtml(String(message))}</span>
       </div>
       <button class="notification-close" aria-label="关闭">
         <i class="fas fa-times"></i>

@@ -12,6 +12,8 @@
 > ⚠️ **重要声明：本项目代码由 AI 生成，未经专业安全审计，可能存在未知漏洞与风险。
 > 部署与使用前请务必阅读 [PROJECT-NOTICE.md](./PROJECT-NOTICE.md)（项目说明与风险声明）。**
 
+> **管理员配置（安全变更）**：`adminUsers` 只接受已注册用户的 UUID，**不再接受 QQ 号**。首次部署请先注册账号，然后在服务器上运行 `node scripts/promote-admin.js <QQ或用户名或邮箱或UUID>` 完成提权。
+
 ## 相关仓库
 
 | 项目 | 仓库地址 |
@@ -587,7 +589,7 @@ school-forum/
 
 ```json
 {
-  "adminUsers": ["1635075096"],
+  "adminUsers": [],
   "mongodb": {
     "uri": "mongodb://localhost:27017/school-forum",
     "username": "",
@@ -641,7 +643,7 @@ school-forum/
 
 | 配置项 | 类型 | 说明 |
 |-------|------|------|
-| `adminUsers` | `string[]` | 管理员 QQ 号列表 |
+| `adminUsers` | `string[]` | 管理员用户 UUID 列表（**不接受 QQ**；首次部署用 `scripts/promote-admin.js` 提权） |
 | `mongodb.uri` | `string` | MongoDB 连接字符串 |
 | `mongodb.username` | `string` | MongoDB 用户名（可选，用于认证） |
 | `mongodb.password` | `string` | MongoDB 密码（可选，用于认证） |
@@ -764,7 +766,7 @@ npm start
 
 - ✅ 检测现有配置，保留已有值不覆盖
 - ✅ 支持 5 种操作模式：交互式配置、快速配置、查看配置、智能更新 IP、退出
-- ✅ 快速模式：仅添加管理员 QQ 号，一步完成
+- ✅ 快速模式：完成基础配置；管理员注册后用 `scripts/promote-admin.js` 提权
 - ✅ 智能 IP 检测：自动识别 192.168.x.x 或 10.x.x.x 内网地址
 - ✅ 配置变更自动备份（`.env.bak`）
 

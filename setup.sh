@@ -107,7 +107,7 @@ echo.
 # 菜单
 echo "请选择操作模式："
 echo "  1) 交互式配置（推荐）- 逐一输入各项配置"
-echo "  2) 快速配置 - 仅添加管理员 QQ 号"
+echo "  2) 快速配置 - 基础配置（管理员注册后提权）"
 echo "  3) 查看当前配置"
 echo "  4) 智能更新 SERVER_IP（检测内网IP并更新）"
 echo "  5) 退出"
@@ -189,19 +189,9 @@ if [[ "$MODE_CHOICE" == "1" ]] || [[ "$MODE_CHOICE" == "2" ]]; then
     echo ""
 fi
 
-# 管理员 QQ 号收集
+# 管理员账号：改为注册后提权，不再收集 QQ（QQ 可被注册/改绑，不能作为授权来源）
 if [[ "$MODE_CHOICE" == "1" ]] || [[ "$MODE_CHOICE" == "2" ]]; then
-    echo -e "${BOLD}[管理员 QQ 号]${NC} 输入空行结束（QQ号为5-15位数字）"
-    while true; do
-        read -p " QQ号 (直接回车结束): " qq
-        if [[ -z "$qq" ]]; then
-            break
-        elif [[ "$qq" =~ ^[0-9]{5,15}$ ]]; then
-            ADMIN_USERS_ARRAY+=("$qq")
-        else
-            log_warn "QQ号必须是5-15位数字，请重新输入"
-        fi
-    done
+    echo -e "${BOLD}[管理员账号]${NC} 管理员改为注册后提权：部署完成后运行 node scripts/promote-admin.js <QQ或用户ID>"
 fi
 
 # 交互模式的额外配置
@@ -313,8 +303,11 @@ fi
 if [[ ${#ADMIN_USERS_ARRAY[@]} -gt 0 ]]; then
     # 使用 jq 更新 JSON
     if command -v jq &> /dev/null; then
-        # 构建 JSON 数组
-        local admin_json=$(printf '%s\n' "${ADMIN_USERS_ARRAY[@]}" | jq -R . | jq -s .)
+        # 构建 JSON 数组（无管理员时写空数组，避免 jq 把空行变成 [""]）
+        local admin_json="[]"
+        if [[ ${#ADMIN_USERS_ARRAY[@]} -gt 0 ]]; then
+            admin_json=$(printf '%s\n' "${ADMIN_USERS_ARRAY[@]}" | jq -R . | jq -s .)
+        fi
         if [[ -f "data/config.json" ]]; then
             # 备份配置目录的配置
             backup_file "data/config.json"

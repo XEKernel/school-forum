@@ -31,7 +31,7 @@ chmod +x setup.sh
 | 模式 | 功能 |
 |-----|------|
 | 交互式配置 | 逐一输入管理员 IP、CORS、SMTP 等 |
-| 快速配置 | 仅添加管理员 QQ 号 |
+| 快速配置 | 基础配置（管理员注册后用 `scripts/promote-admin.js` 提权） |
 | 查看配置 | 显示当前 .env 和 config.json 内容 |
 | 智能更新 IP | 自动检测 192.168.x.x 内网地址并写入 |
 
@@ -331,7 +331,7 @@ sudo ufw enable   # 如果 UFW 未启用
 - 检查 `config.json` 中的上传限制（如文件大小、允许类型）是否合理。
 
 ### 14.5 管理员后台无法访问（权限问题）
-- 确认您的 QQ 号或用户 ID 已添加到项目配置文件中的 `adminUsers` 数组。
+- 确认您的用户 UUID 已加入 `adminUsers`（首次部署运行 `node scripts/promote-admin.js <QQ或用户ID>` 提权）。
 - 重启应用使配置生效：`pm2 restart forum`
 
 ### 14.6 PM2 启动后无法访问

@@ -42,6 +42,10 @@ function getPasswordPolicyError(password) {
   try {
     const { getDynamicPasswordPolicy } = require('../config/security');
     const policy = getDynamicPasswordPolicy();
+    // bcrypt 只使用前 72 字节：超长密码会被静默截断，两个不同长密码可能等价
+    if (Buffer.byteLength(String(password), 'utf8') > 72) {
+      return '密码过长：bcrypt 只使用前 72 字节，请缩短到 72 字节以内';
+    }
     if (policy.pattern.test(String(password))) return null;
     const requirements = [`至少 ${policy.minLength} 位`];
     if (policy.requireUppercase) requirements.push('含大写字母');
@@ -52,6 +56,21 @@ function getPasswordPolicyError(password) {
   } catch (policyError) {
     console.error('读取密码策略失败，回退到默认长度校验:', policyError.message);
     return String(password).length >= 6 ? null : '密码至少6个字符';
+  }
+}
+
+// 删除被替换/移除的本地头像文件（只处理 /images/avatars/ 下的 basename，防路径穿越）
+function removeOldAvatarFile(avatarUrl) {
+  try {
+    if (!avatarUrl || !String(avatarUrl).startsWith('/images/avatars/')) return;
+    const fs = require('fs');
+    const path = require('path');
+    const dir = path.join(__dirname, '../../public/images/avatars');
+    const target = path.join(dir, path.basename(avatarUrl));
+    if (path.dirname(target) !== dir) return;
+    fs.promises.unlink(target).catch(() => {});
+  } catch (_) {
+    // 清理旧头像失败不影响主流程
   }
 }
 
@@ -982,6 +1001,7 @@ const userController = {
       // 更新头像（如果上传了新头像文件）
       // avatarUpload 中间件已做扩展名↔mimetype 白名单校验（jpg/png/gif/webp）
       if (req.file) {
+        removeOldAvatarFile(user.avatar);
         updateData.avatar = `/images/avatars/${req.file.filename}`;
       }
       
@@ -1109,7 +1129,8 @@ const userController = {
         return res.status(404).json(generateErrorResponse('用户不存在'));
       }
       
-      // 更新用户头像路径
+      // 更新用户头像路径（清理被替换的旧头像文件，避免无限堆积）
+      removeOldAvatarFile(user.avatar);
       const avatar = `/images/avatars/${req.file.filename}`;
       const updatedUser = await updateUser(userId, { avatar });
       
@@ -1140,7 +1161,8 @@ const userController = {
         return res.status(404).json(generateErrorResponse('用户不存在'));
       }
       
-      // 删除头像（设置为null，使用默认头像）
+      // 删除头像（设置为null，使用默认头像），并清理旧头像文件
+      removeOldAvatarFile(user.avatar);
       const updatedUser = await updateUser(userId, { avatar: null });
       
       // 清除用户缓存
@@ -2194,7 +2216,9 @@ const userController = {
       if (!qqOAuth.isConfigured()) {
         return res.status(400).json(generateErrorResponse('QQ登录未配置，请联系管理员'));
       }
-      const type = req.query.type === 'bind' ? 'bind' : 'login';
+      // bind 专用路由强制绑定语义，不能靠 query 覆盖（否则登录态用户可能被诱导创建 login 会话）
+      const isBindRoute = String(req.path || '').includes('authorize-url-bind');
+      const type = (isBindRoute || req.query.type === 'bind') ? 'bind' : 'login';
 
       // 安全：本接口同时服务「登录」与「绑定」两种场景，登录场景必须匿名可用，
       // 因此路由无法整体加 authenticateUser；但绑定场景必须要求身份——
@@ -2572,25 +2596,44 @@ function filterUserInfoByPrivacy(user, isSelf, isFollower, isAdminViewer) {
   const profileVisibility = user.settings?.privacy?.profileVisibility || {};
 
   // 字段是否可见：仅显式设置为 public 或（followers 且查看者是粉丝）
-  const isFieldVisible = (field) => {
-    const visibility = profileVisibility[field];
+  // defaultVisibility：未设置时的默认值（school/joinDate/signature 维持原有“公开”默认；
+  // gender/birthday/lastLogin 维持原有“不公开”默认），用户显式设置后以设置为准。
+  const isFieldVisible = (field, defaultVisibility = 'self') => {
+    const visibility = profileVisibility[field] ?? defaultVisibility;
     if (visibility === 'public') return true;
     if (visibility === 'followers') return isFollower;
-    return false; // 未设置 / self → 不公开
+    return false; // self / 未设置且默认不公开
   };
 
-  // 白名单：固定公开字段
+  // 固定公开字段（不含学校/年级/班级等受隐私设置控制的字段）
   const filteredUser = {};
-  for (const field of ['id', 'username', 'avatar', 'school', 'grade', 'enrollmentYear', 'className', 'postCount', 'commentCount', 'createdAt', 'isAdmin']) {
+  for (const field of ['id', 'username', 'avatar', 'postCount', 'commentCount', 'isAdmin']) {
     if (safeUser[field] !== undefined) {
       filteredUser[field] = safeUser[field];
     }
   }
 
-  // 签名（前端从 settings.signature 读取，保持结构）
-  filteredUser.settings = { signature: safeUser.settings?.signature || '' };
+  // 隐私设置控制字段：此前 school/grade/enrollmentYear/className/createdAt 被硬编码为公开，
+  // 设置页的 visibility-school / visibility-joinDate 实际不生效。
+  const gatedFields = {
+    school: ['school', 'grade', 'enrollmentYear', 'className'],
+    joinDate: ['createdAt'],
+    lastLogin: ['lastLogin']
+  };
+  for (const [setting, fields] of Object.entries(gatedFields)) {
+    const defaultVisibility = setting === 'lastLogin' ? 'self' : 'public';
+    if (!isFieldVisible(setting, defaultVisibility)) continue;
+    for (const field of fields) {
+      if (safeUser[field] !== undefined) filteredUser[field] = safeUser[field];
+    }
+  }
 
-  // 用户显式公开的可选字段
+  // 签名（前端从 settings.signature 读取，保持结构；self/followers 设置生效）
+  filteredUser.settings = {
+    signature: isFieldVisible('signature', 'public') ? (safeUser.settings?.signature || '') : ''
+  };
+
+  // 用户显式设置的可选字段（默认不公开）
   if (isFieldVisible('gender') && safeUser.gender) {
     filteredUser.gender = safeUser.gender;
   }

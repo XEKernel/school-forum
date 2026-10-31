@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 const logger = require('./logger');
 const { verificationCode, isRedisConnected } = require('./redisUtils');
 
@@ -32,7 +33,8 @@ const createTransporter = () => {
 
 // 生成6位随机验证码
 const generateVerificationCode = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  // 安全：验证码用于注册/登录/改密/注销，必须使用 CSPRNG（Math.random 可预测）
+  return crypto.randomInt(100000, 1000000).toString();
 };
 
 // 生成邮件HTML模板

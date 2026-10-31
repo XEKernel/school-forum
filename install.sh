@@ -276,18 +276,24 @@ download_and_extract() {
     local sha_url sha_file expect actual
     sha_url="${url}.sha256"
     sha_file="$tmp/${ASSET}.sha256"
-    # 复用刚下载 tar 包成功的镜像源（仅用于取校验文件，最终仍要求与包内容一致）
-    if ! download_with_proxies "$sha_url" "$sha_file" raw "$LAST_OK_PROXY"; then
-        log_error "无法获取 SHA256 校验文件，已中止安装（安装包完整性无法验证）"
-        rm -rf "$tmp"
-        return 1
-    fi
     if ! need_cmd sha256sum; then
         log_error "系统缺少 sha256sum，无法验证安装包完整性，已中止安装"
         rm -rf "$tmp"
         return 1
     fi
-    expect=$(awk '{print $1}' "$sha_file" 2>/dev/null)
+    if [[ -n "${SCHOOL_FORUM_SHA256:-}" ]]; then
+        # 独立信任根：运维从发布页/公告等独立渠道提供摘要时，不再信任同源镜像的 .sha256
+        expect="${SCHOOL_FORUM_SHA256}"
+        log_info "使用 SCHOOL_FORUM_SHA256 提供的独立校验值"
+    else
+        # 复用刚下载 tar 包成功的镜像源（仅用于取校验文件，最终仍要求与包内容一致）
+        if ! download_with_proxies "$sha_url" "$sha_file" raw "$LAST_OK_PROXY"; then
+            log_error "无法获取 SHA256 校验文件，已中止安装（可设置 SCHOOL_FORUM_SHA256 提供独立校验值）"
+            rm -rf "$tmp"
+            return 1
+        fi
+        expect=$(awk '{print $1}' "$sha_file" 2>/dev/null)
+    fi
     actual=$(sha256sum "$pkg" | awk '{print $1}')
     if [[ -z "$expect" || "$expect" != "$actual" ]]; then
         log_error "SHA256 校验失败（期望 ${expect:-<空>}，实际 $actual），已中止安装"
