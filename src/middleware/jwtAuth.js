@@ -264,6 +264,22 @@ async function authenticateUser(req, res, next) {
         message: '无效的身份验证'
       });
     }
+
+    // 令牌类型校验（安全）：JWT 的 type 声明此前只在签发时写入、验证侧从未读取，
+    // 于是 30 天有效的 refresh token 可以直接塞进 Authorization 头当 access 用，
+    // 把凭据寿命放大到 4 倍，也让「refresh 轮换」对已泄露令牌失去意义。
+    if (result.decoded.type !== 'access') {
+      logger.logSecurityEvent('令牌类型不符', {
+        path: req.path,
+        method: req.method,
+        tokenType: result.decoded.type || '(未声明)'
+      });
+      return res.status(401).json({
+        success: false,
+        message: '令牌类型不正确，请使用访问令牌',
+        code: 'TOKEN_TYPE_MISMATCH'
+      });
+    }
     
     // 检查令牌是否在黑名单中（已注销）——Redis 不可用时跳过该检查，不阻断请求
     let isBlacklisted = null;
@@ -381,6 +397,17 @@ async function authenticateAdmin(req, res, next) {
     }
     
     const result = verifyToken(token, true);
+
+    // 令牌类型校验（防御纵深）：管理员令牌走独立密钥与 issuer/audience，
+    // 用户令牌本就过不来；这里再钉一次 type，避免将来配置变更造成交叉可用。
+    if (result.valid && result.decoded.type !== 'admin') {
+      logger.logSecurityEvent('管理员令牌类型不符', { path: req.path, tokenType: result.decoded.type || '(未声明)' });
+      return res.status(401).json({
+        success: false,
+        message: '管理员令牌类型不正确',
+        code: 'TOKEN_TYPE_MISMATCH'
+      });
+    }
     
     if (!result.valid) {
       if (result.error === 'TokenExpiredError') {
@@ -473,8 +500,17 @@ async function optionalAuth(req, res, next) {
   
   try {
     const result = verifyToken(token);
-    
-    if (result.valid) {
+
+    // 令牌类型校验：公开接口接受可选认证，但只有 access token 才算「已登录」。
+    // 类型不符时降级为匿名（不返回 401），避免公开页面因为客户端放了错误令牌而整体不可用。
+    if (result.valid && result.decoded.type !== 'access') {
+      logger.logWarn('可选认证：令牌类型不符，按匿名处理', {
+        path: req.path,
+        tokenType: result.decoded.type || '(未声明)'
+      });
+    }
+
+    if (result.valid && result.decoded.type === 'access') {
       const user = await User.findOne({ id: result.decoded.userId }).lean();
       if (user && user.isActive !== false) {
         // 与 authenticateUser 保持同一撤销/状态语义：黑名单、改密时间、封禁状态；
