@@ -152,6 +152,11 @@ const followController = {
         return res.status(400).json(generateErrorResponse('用户ID不能为空'));
       }
 
+      // 归属校验：关注关系属隐私数据，仅关系双方或管理员可查询（与列表接口同策略）
+      if (followerId !== req.user.id && followingId !== req.user.id && req.user.role !== 'admin') {
+        return res.status(403).json(generateErrorResponse('无权查询该关注关系'));
+      }
+
       logger.logInfo('检查关注状态', { followerId, followingId });
 
       // 直接从数据库检查（更可靠）
@@ -387,10 +392,20 @@ const followController = {
         }));
       }
 
-      // 查询这些用户的帖子
+      // 可见性过滤：self 仅作者可见；followers 仅作者与粉丝可见（feed 内作者都是本查看者关注的）。
+      // 此前只按 userId/isDeleted 查询，任何关注者都能读到作者的 self 帖。
+      const visibilityFilter = {
+        $or: [
+          { visibility: 'public' },
+          { visibility: { $exists: false } },
+          { visibility: 'followers' },
+          { userId }
+        ]
+      };
       const posts = await Post.find({
         userId: { $in: followingIds },
-        isDeleted: { $ne: true }
+        isDeleted: { $ne: true },
+        ...visibilityFilter
       })
       .sort({ timestamp: -1 })
       .skip(skip)
@@ -415,7 +430,8 @@ const followController = {
       // 获取总数
       const total = await Post.countDocuments({
         userId: { $in: followingIds },
-        isDeleted: { $ne: true }
+        isDeleted: { $ne: true },
+        ...visibilityFilter
       });
 
       res.json(generateSuccessResponse({
@@ -441,6 +457,11 @@ const followController = {
 
       if (!userId) {
         return res.status(400).json(generateErrorResponse('用户ID不能为空'));
+      }
+
+      // 归属校验：新帖计数会暴露他人的关注关系与阅读状态，仅本人或管理员可查
+      if (userId !== req.user.id && req.user.role !== 'admin') {
+        return res.status(403).json(generateErrorResponse('无权查看该用户的新帖计数'));
       }
 
       // 获取关注的人的ID列表

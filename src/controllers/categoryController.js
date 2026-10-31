@@ -6,6 +6,27 @@ const { getUserById } = require('../utils/dataUtils');
 const { generateSuccessResponse, generateErrorResponse } = require('../utils/validationUtils');
 const logger = require('../utils/logger');
 
+// 匿名访问时的字段最小化（与 postController 列表/搜索一致）
+function stripCategoryAnonymous(post) {
+  const plain = typeof post.toObject === 'function' ? post.toObject() : post;
+  const stripList = (list) => (Array.isArray(list) ? list.map((item) => ({
+    ...item,
+    likedBy: [],
+    dislikedBy: [],
+    replies: stripList(item.replies)
+  })) : []);
+  return {
+    ...plain,
+    school: '',
+    grade: '',
+    className: '',
+    likedBy: [],
+    dislikedBy: [],
+    deviceInfo: undefined,
+    comments: stripList(plain.comments)
+  };
+}
+
 // ============ 公开接口 ============
 
 // 获取所有已启用栏目
@@ -51,10 +72,27 @@ exports.getCategoryPosts = async (req, res) => {
       return res.status(404).json(generateErrorResponse('栏目不存在'));
     }
 
+    // 可见性必须在查询层完成：否则 count/skip/limit 会把不可见帖子算进总数与分页，
+    // 形成隐藏帖数量 oracle，并让分页窗口被不可见帖子占用。
+    const visibilityFilter = viewerId
+      ? {
+          $or: [
+            { visibility: 'public' },
+            { visibility: { $exists: false } },
+            { userId: viewerId },
+            {
+              visibility: 'followers',
+              userId: { $in: await require('../models/Follow').getFollowingIds(viewerId) }
+            }
+          ]
+        }
+      : { $or: [{ visibility: 'public' }, { visibility: { $exists: false } }] };
+
     // 查询该栏目的帖子
     const query = {
       isDeleted: false,
-      categoryId: id
+      categoryId: id,
+      ...visibilityFilter
     };
 
     let sort = { timestamp: -1 };
@@ -64,26 +102,8 @@ exports.getCategoryPosts = async (req, res) => {
 
     const posts = await Post.find(query).sort(sort).skip(skip).limit(limitNum);
 
-    // 可见性过滤：self 仅作者可见，followers 仅作者与粉丝可见，public 所有人可见
-    let visiblePosts = posts;
-    if (viewerId) {
-      const Follow = require('../models/Follow');
-      const visibleIds = [];
-      for (const post of posts) {
-        const visibility = post.visibility || 'public';
-        if (visibility === 'public' || post.userId === viewerId) {
-          visibleIds.push(post);
-        } else if (visibility === 'followers') {
-          const isFollowing = await Follow.isFollowing(viewerId, post.userId);
-          if (isFollowing) visibleIds.push(post);
-        }
-      }
-      visiblePosts = visibleIds;
-    } else {
-      // 未登录用户只能看到公开帖子
-      visiblePosts = posts.filter(post => (post.visibility || 'public') === 'public');
-    }
-
+    // 匿名访问：与列表/搜索接口一致的字段最小化（作者 PII + 点赞/点踩 UUID）
+    const visiblePosts = viewerId ? posts : posts.map(stripCategoryAnonymous);
     const total = await Post.countDocuments(query);
 
     res.json(generateSuccessResponse({

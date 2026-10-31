@@ -15,6 +15,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # 需要完整历史以生成版本号
+          persist-credentials: false # 不把 GITHUB_TOKEN 写进 .git/config，避免依赖安装脚本读取
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -23,7 +24,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies (production only)
-        run: npm ci --omit=dev
+        run: npm ci --omit=dev --ignore-scripts
 
       - name: Generate version number
         id: ver

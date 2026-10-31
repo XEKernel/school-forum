@@ -97,6 +97,10 @@ const statsController = {
           type: 'posts'
         }));
       } else if (type === 'users') {
+        // 用户搜索会返回 school/grade/className 等 PII，且可按用户名批量枚举账号，必须登录后使用
+        if (!req.user) {
+          return res.status(401).json(generateErrorResponse('请先登录后再搜索用户', 401));
+        }
         const query = { username: new RegExp(escapeRegex(q), 'i') };
         const [users, total] = await Promise.all([
           User.find(query).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),

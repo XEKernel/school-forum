@@ -151,7 +151,16 @@ function isHttpsRequest(req) {
  * @param {object} req
  * @returns {boolean}
  */
+function isCookieAuthenticated(req) {
+  const cookies = parseCookies(req);
+  return !!(cookies[AUTH_COOKIES.access] || cookies[AUTH_COOKIES.refresh] || cookies[AUTH_COOKIES.admin]);
+}
+
 function isApiClient(req) {
+  // 安全：只要请求携带了本站认证 Cookie，就说明是浏览器（同源页面）在发请求。
+  // 浏览器 XSS 可以自带 `X-Client: app` 头；若仅凭请求头判定 API 客户端，
+  // 就能把 HttpOnly 令牌以 JSON 形式读回。带认证 Cookie 一律按浏览器处理，绝不返回明文令牌。
+  if (isCookieAuthenticated(req)) return false;
   const ua = req.get('user-agent') || '';
   if (/okhttp\//i.test(ua)) return true;
   return String(req.get('x-client') || '').toLowerCase() === 'app';
@@ -282,6 +291,16 @@ async function authenticateUser(req, res, next) {
       });
     }
 
+    // 账号状态检查（安全）：被封禁账号的既有 access token 必须立即失效。
+    // 此前只有登录、发帖、评论、私信等少数端点检查 isActive，点赞/收藏/关注/改资料/导出等全部放行。
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: '该账号已被封禁，无法继续操作',
+        code: 'ACCOUNT_DISABLED'
+      });
+    }
+
     // 密码变更后旧令牌失效检查（安全）：token 签发时间早于密码变更时间 → 拒绝
     // 覆盖忘记密码重置 / 修改密码后，旧 token（含其他设备）立即失效
     // 容差 1 秒：passwordChangedAt 为毫秒精度、token iat 为秒精度，同一秒内
@@ -406,6 +425,19 @@ async function authenticateAdmin(req, res, next) {
       });
     }
     
+    // 管理员 JWT 有独立密钥与 24h 期限；改密后旧管理员令牌必须立即失效（此前完全不校验 passwordChangedAt）
+    const adminUser = validationResult.user;
+    if (adminUser && adminUser.passwordChangedAt && result.decoded.iat) {
+      const adminChangedAt = new Date(adminUser.passwordChangedAt).getTime();
+      if (result.decoded.iat * 1000 + 1000 < adminChangedAt) {
+        return res.status(401).json({
+          success: false,
+          message: '管理员会话已失效，请重新登录',
+          code: 'PASSWORD_CHANGED'
+        });
+      }
+    }
+
     // 将管理员信息附加到请求对象
     req.admin = {
       id: result.decoded.adminId,
@@ -444,15 +476,30 @@ async function optionalAuth(req, res, next) {
     
     if (result.valid) {
       const user = await User.findOne({ id: result.decoded.userId }).lean();
-      if (user) {
-        req.user = {
-          id: user.id,
-          username: user.username,
-          qq: user.qq,
-          avatar: user.avatar,
-          role: user.role || 'user'
-        };
-        req.token = token;
+      if (user && user.isActive !== false) {
+        // 与 authenticateUser 保持同一撤销/状态语义：黑名单、改密时间、封禁状态；
+        // 否则已登出或改密前签发的 token 仍可用于读取 self/followers 帖子。
+        let revoked = false;
+        try {
+          const redis = getRedisClient();
+          if (redis) {
+            revoked = !!(await redis.get(`token_blacklist:${token}`));
+          }
+        } catch (redisError) {
+          logger.logWarn('optionalAuth 黑名单检查跳过（Redis不可用）', { error: redisError.message });
+        }
+        const passwordChanged = user.passwordChangedAt && result.decoded.iat &&
+          (result.decoded.iat * 1000 + 1000 < new Date(user.passwordChangedAt).getTime());
+        if (!revoked && !passwordChanged) {
+          req.user = {
+            id: user.id,
+            username: user.username,
+            qq: user.qq,
+            avatar: user.avatar,
+            role: user.role || 'user'
+          };
+          req.token = token;
+        }
       }
     }
   } catch (error) {
@@ -641,6 +688,7 @@ async function checkLoginLocked(identifier) {
 }
 
 module.exports = {
+  parseCookies,
   generateAccessToken,
   generateRefreshToken,
   generateAdminToken,

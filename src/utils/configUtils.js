@@ -30,8 +30,8 @@ const SELF_DESTRUCT_LEVELS = {
 
 // 默认配置
 const DEFAULT_CONFIG = {
-  // 管理员列表
-  adminUsers: ['1635075096'],
+  // 管理员列表（安全：不再内置任何公共 QQ/账号默认值；首次部署必须显式添加管理员 UUID）
+  adminUsers: [],
   
   // 运行模式配置
   runMode: {

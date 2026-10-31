@@ -11,7 +11,8 @@ const {
 } = require('../utils/dataUtils');
 const {
   generateErrorResponse,
-  generateSuccessResponse
+  generateSuccessResponse,
+  isAdminUser
 } = require('../utils/validationUtils');
 const { getPaginationConfig } = require('../config/constants');
 const logger = require('../utils/logger');
@@ -285,6 +286,21 @@ const reportController = {
           return res.status(400).json(generateErrorResponse('封禁天数无效'));
         }
         banDays = Math.min(Math.floor(parsed), 3650);
+      }
+
+      // 管理员不得处理自己提交的举报，也不得借举报封禁自己
+      if (action === 'approve' && report.reporterId === adminId) {
+        return res.status(400).json(generateErrorResponse('不能处理自己提交的举报'));
+      }
+      if (action === 'approve' && report.targetUserId === adminId) {
+        return res.status(400).json(generateErrorResponse('不能封禁自己'));
+      }
+      // 与 banUser 同一护栏：举报处理是第二条封禁路径，不得封禁管理员
+      if (action === 'approve') {
+        const guardedTarget = await getUserById(report.targetUserId);
+        if (guardedTarget && (guardedTarget.role === 'admin' || isAdminUser(guardedTarget))) {
+          return res.status(403).json(generateErrorResponse('不能封禁管理员账号'));
+        }
       }
 
       // ---- 状态机第一步：原子认领 ----

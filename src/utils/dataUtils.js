@@ -427,11 +427,15 @@ async function migrateAdminRoles() {
   for (const entry of entries) {
     if (!entry) continue;
 
-    // 条目既可能是用户 UUID，也可能是遗留的 QQ 号
-    const user = UUID_RE.test(entry)
-      ? await User.findOne({ id: entry }).select('id role').lean()
-      : await User.findOne({ qq: entry }).select('id role').lean();
+    // 安全：QQ 是注册者自填、可用 changeQQ 改绑的标识，绝不能作为管理员授权来源。
+    // 非 UUID 的遗留/默认 QQ 条目只保留并报告，不再自动提权（否则谁先注册/改绑该 QQ 谁就在下次启动获得后台）。
+    if (!UUID_RE.test(entry)) {
+      summary.unresolved.push(entry);
+      nextList.push(entry);
+      continue;
+    }
 
+    const user = await User.findOne({ id: entry }).select('id role').lean();
     if (!user) {
       summary.unresolved.push(entry);
       nextList.push(entry);
@@ -441,9 +445,6 @@ async function migrateAdminRoles() {
     if (user.role !== 'admin') {
       await User.updateOne({ id: user.id }, { $set: { role: 'admin' } });
       summary.promoted.push(user.id);
-    }
-    if (entry !== user.id) {
-      summary.rewritten.push(`${entry} → ${user.id}`);
     }
     nextList.push(user.id);
   }

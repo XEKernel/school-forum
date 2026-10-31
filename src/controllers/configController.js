@@ -79,7 +79,22 @@ const configController = {
 
       logger.logSecurityEvent('管理员更新配置', { adminId, updates, ip: req.ip });
 
-      const success = updateConfig(updates);
+      // 键白名单：只允许更新运营配置；adminUsers / mongodb / redis / password / runMode 等
+      // 必须走各自的专用接口（addAdmin 有“目标必须已注册”校验），不能绕过。
+      const CONFIG_WRITE_ALLOWLIST = ['upload', 'pagination', 'contentLimits', 'schools', 'security'];
+      const safeUpdates = {};
+      for (const [configKey, configValue] of Object.entries(updates)) {
+        if (CONFIG_WRITE_ALLOWLIST.includes(configKey)) {
+          safeUpdates[configKey] = configValue;
+        } else {
+          logger.logSecurityEvent('管理员配置写入被拒绝（非白名单键）', { adminId, key: configKey, ip: req.ip });
+        }
+      }
+      if (Object.keys(safeUpdates).length === 0) {
+        return res.status(400).json(generateErrorResponse('没有可更新的合法配置项'));
+      }
+
+      const success = updateConfig(safeUpdates);
       
       if (success) {
         logger.logSystemEvent('配置已更新', { adminId });

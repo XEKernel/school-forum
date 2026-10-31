@@ -44,6 +44,26 @@ const Favorite = require('../models/Favorite');
 const Blacklist = require('../models/Blacklist');
 const User = require('../models/User');
 
+// 匿名访问时隐藏作者 PII（学校/年级/班级）与点赞/点踩者 UUID，与列表/搜索接口保持同一脱敏规则
+function stripAnonymousFields(post) {
+  const stripList = (list) => (Array.isArray(list) ? list.map((item) => ({
+    ...item,
+    likedBy: [],
+    dislikedBy: [],
+    replies: stripList(item.replies)
+  })) : []);
+  return {
+    ...post,
+    school: '',
+    grade: '',
+    className: '',
+    likedBy: [],
+    dislikedBy: [],
+    deviceInfo: undefined,
+    comments: stripList(post.comments)
+  };
+}
+
 /**
  * 评论/回复嵌套深度上限（评论为第1层，回复最多到第6层）
  * 两端一致：服务端 addReply 拒绝超限，安卓端渲染按 6 层截断
@@ -665,8 +685,11 @@ const postController = {
       // 评论富化：实时补全评论/回复头像与回复目标（回复 @xxx）
       filteredPost.comments = await enrichComments(filteredPost.comments);
 
+      // 匿名访问：与列表/搜索保持同一脱敏规则（此前详情接口把 school/grade/className、
+      // likedBy/dislikedBy、deviceInfo 原样返回给未登录用户）
+      const safePost = viewerId ? filteredPost : stripAnonymousFields(filteredPost);
       res.json(generateSuccessResponse({
-        post: filteredPost
+        post: safePost
       }));
     } catch (error) {
       logger.logError('获取帖子详情失败', { error: error.message, postId: req.params.id });
@@ -688,6 +711,11 @@ const postController = {
 
       if (!post || post.isDeleted) {
         logger.logWarn('增加浏览量失败：帖子不存在', { postId });
+        return res.status(404).json(generateErrorResponse('帖子不存在'));
+      }
+
+      // 可见性检查：非公开帖子不得通过匿名计数接口被写入，也不能用它探测隐藏帖是否存在
+      if ((post.visibility || 'public') !== 'public') {
         return res.status(404).json(generateErrorResponse('帖子不存在'));
       }
 

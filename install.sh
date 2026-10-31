@@ -271,22 +271,30 @@ download_and_extract() {
     fi
     log_success "下载完成: $(du -h "$pkg" | cut -f1)"
 
-    # 可选：校验 sha256
-    local sha_url sha_file
+    # 强制校验 sha256（fail-closed）：校验文件必须可获取且与安装包一致，否则中止安装。
+    # 此前校验文件与安装包来自同一镜像源、且不匹配只告警，等于没有完整性校验。
+    local sha_url sha_file expect actual
     sha_url="${url}.sha256"
     sha_file="$tmp/${ASSET}.sha256"
-    # 复用刚下载 tar 包成功的镜像源，避免再次轮询所有镜像（用户要求：下载完就别换源）
-    if download_with_proxies "$sha_url" "$sha_file" raw "$LAST_OK_PROXY" 2>/dev/null; then :; fi
-    if [[ -f "$sha_file" ]] && need_cmd sha256sum; then
-        local expect actual
-        expect=$(awk '{print $1}' "$sha_file" 2>/dev/null)
-        actual=$(sha256sum "$pkg" | awk '{print $1}')
-        if [[ -n "$expect" && "$expect" == "$actual" ]]; then
-            log_success "SHA256 校验通过"
-        elif [[ -n "$expect" ]]; then
-            log_warn "SHA256 不匹配（期望 $expect，实际 $actual），继续但请留意完整性"
-        fi
+    # 复用刚下载 tar 包成功的镜像源（仅用于取校验文件，最终仍要求与包内容一致）
+    if ! download_with_proxies "$sha_url" "$sha_file" raw "$LAST_OK_PROXY"; then
+        log_error "无法获取 SHA256 校验文件，已中止安装（安装包完整性无法验证）"
+        rm -rf "$tmp"
+        return 1
     fi
+    if ! need_cmd sha256sum; then
+        log_error "系统缺少 sha256sum，无法验证安装包完整性，已中止安装"
+        rm -rf "$tmp"
+        return 1
+    fi
+    expect=$(awk '{print $1}' "$sha_file" 2>/dev/null)
+    actual=$(sha256sum "$pkg" | awk '{print $1}')
+    if [[ -z "$expect" || "$expect" != "$actual" ]]; then
+        log_error "SHA256 校验失败（期望 ${expect:-<空>}，实际 $actual），已中止安装"
+        rm -rf "$tmp"
+        return 1
+    fi
+    log_success "SHA256 校验通过"
 
     log_step "解压到 $INSTALL_DIR"
     mkdir -p "$INSTALL_DIR"

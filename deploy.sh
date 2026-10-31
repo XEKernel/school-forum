@@ -584,9 +584,9 @@ install_mongodb_docker() {
         docker compose version >/dev/null 2>&1 || log_warn "无 compose 插件，改用 docker run"
         log_info "直接拉取并运行 mongo:$version ..."
         $SUDO docker rm -f "mongodb${version//.}" >/dev/null 2>&1 || true
-        $SUDO docker run -d --name "mongodb${version//.}" -p 27017:27017 \
+        $SUDO docker run -d --name "mongodb${version//.}" -p 127.0.0.1:27017:27017 \
             -v "mongodb${version//.}-data:/data/db" --restart unless-stopped "mongo:$version" 2>/dev/null || \
-        docker run -d --name "mongodb${version//.}" -p 27017:27017 \
+        docker run -d --name "mongodb${version//.}" -p 127.0.0.1:27017:27017 \
             -v "mongodb${version//.}-data:/data/db" --restart unless-stopped "mongo:$version"
     fi
 

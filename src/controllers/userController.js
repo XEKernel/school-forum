@@ -36,6 +36,25 @@ const User = require('../models/User');
 // 公共邮箱验证正则
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// 统一密码策略入口：以管理员面板配置的 security.password* 为准。
+// 此前 getDynamicPasswordPolicy() 全仓无调用点，注册/改密/重置实际只校验硬编码的 6 位长度。
+function getPasswordPolicyError(password) {
+  try {
+    const { getDynamicPasswordPolicy } = require('../config/security');
+    const policy = getDynamicPasswordPolicy();
+    if (policy.pattern.test(String(password))) return null;
+    const requirements = [`至少 ${policy.minLength} 位`];
+    if (policy.requireUppercase) requirements.push('含大写字母');
+    if (policy.requireLowercase) requirements.push('含小写字母');
+    if (policy.requireNumber) requirements.push('含数字');
+    if (policy.requireSpecial) requirements.push('含特殊字符');
+    return `密码不符合安全策略：${requirements.join('、')}`;
+  } catch (policyError) {
+    console.error('读取密码策略失败，回退到默认长度校验:', policyError.message);
+    return String(password).length >= 6 ? null : '密码至少6个字符';
+  }
+}
+
 const userController = {
   // 生成图形验证码
   async getCaptcha(req, res) {
@@ -217,8 +236,9 @@ const userController = {
         return res.status(400).json(generateErrorResponse('请输入新密码'));
       }
 
-      if (newPassword.length < 6) {
-        return res.status(400).json(generateErrorResponse('密码至少6个字符'));
+      const passwordPolicyError = getPasswordPolicyError(newPassword);
+      if (passwordPolicyError) {
+        return res.status(400).json(generateErrorResponse(passwordPolicyError));
       }
 
       if (!verificationCode) {
@@ -332,8 +352,9 @@ const userController = {
         return res.status(400).json(generateErrorResponse('请输入新密码'));
       }
 
-      if (newPassword.length < 6) {
-        return res.status(400).json(generateErrorResponse('密码至少6个字符'));
+      const passwordPolicyError = getPasswordPolicyError(newPassword);
+      if (passwordPolicyError) {
+        return res.status(400).json(generateErrorResponse(passwordPolicyError));
       }
 
       if (newPassword.length > 64) {
@@ -380,6 +401,12 @@ const userController = {
       if (validationErrors.length > 0) {
         logger.logWarn('用户注册失败：验证错误', { qq, username, errors: validationErrors });
         return res.status(400).json(generateErrorResponse(validationErrors[0]));
+      }
+
+      // 管理员配置的密码策略必须真正生效（此前该函数从未被调用）
+      const passwordPolicyError = getPasswordPolicyError(password);
+      if (passwordPolicyError) {
+        return res.status(400).json(generateErrorResponse(passwordPolicyError));
       }
 
       // 字符集强校验（服务端最后一道防线：防止把 HTML/脚本片段存进资料字段）
@@ -865,8 +892,9 @@ const userController = {
         }
 
         // 与 changePassword 保持一致：资料接口同样不能绕过密码长度策略
-        if (String(newPassword).length < 6) {
-          return res.status(400).json(generateErrorResponse('密码至少6个字符'));
+        const passwordPolicyError = getPasswordPolicyError(newPassword);
+        if (passwordPolicyError) {
+          return res.status(400).json(generateErrorResponse(passwordPolicyError));
         }
         
         // 加密新密码
@@ -1392,6 +1420,11 @@ const userController = {
       const user = await getUserById(result.decoded.userId);
       if (!user) {
         return res.status(401).json(generateErrorResponse('用户不存在'));
+      }
+
+      // 被封禁账号不得继续用 refresh token 续期（此前 refresh 只校验 passwordChangedAt）
+      if (user.isActive === false) {
+        return res.status(403).json(generateErrorResponse('该账号已被封禁，无法刷新登录状态'));
       }
 
       // 密码变更后旧 refresh token 失效检查（与 jwtAuth.authenticateUser 同款判据）：
@@ -2179,6 +2212,17 @@ const userController = {
         session.userId = req.user.id;
       }
       await qqCache.set(state, session);
+      // 浏览器绑定：除 state 外再下发 HttpOnly Cookie，回调/取结果时必须与 state 匹配，
+      // 防止攻击者把自己的 state 通过登录 CSRF 塞给受害者（state fixation）
+      const qqSecure = req.secure ||
+        String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+      res.cookie('sf_qq_state', state, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: qqSecure,
+        path: '/api/auth/qq',
+        maxAge: 10 * 60 * 1000
+      });
       const url = qqOAuth.getAuthorizeUrl(state);
       res.json(generateSuccessResponse({ url, state }, 'OK'));
     } catch (error) {
@@ -2201,6 +2245,11 @@ const userController = {
 
     try {
       if (!code || !state) return failRedirect('QQ授权参数缺失');
+      const { parseCookies } = require('../middleware/jwtAuth');
+      const boundState = parseCookies(req)['sf_qq_state'];
+      if (!boundState || boundState !== state) {
+        return failRedirect('QQ授权会话与当前浏览器不匹配，请重新发起登录');
+      }
       const session = await qqCache.get(state);
       if (!session) return failRedirect('QQ授权会话已过期，请重新登录');
 
@@ -2236,6 +2285,15 @@ const userController = {
 
       // ===== 登录场景 =====
       if (existing) {
+        // 与密码登录保持同一账号状态校验：被封禁账号不得通过 QQ 登录获得会话
+        const BannedUser = require('../models/BannedUser');
+        if (await BannedUser.isUserBanned(existing.id)) {
+          return failRedirect('该账号已被封禁，无法登录');
+        }
+        if (existing.isActive === false) {
+          await updateUser(existing.id, { isActive: true });
+          existing.isActive = true;
+        }
         // 已有账号：构建登录响应
         const payload = await buildAuthPayload(existing, req, res);
         session.profile = profile;
@@ -2262,11 +2320,17 @@ const userController = {
     try {
       const { state } = req.query;
       if (!state) return res.status(400).json(generateErrorResponse('参数缺失'));
+      const { parseCookies } = require('../middleware/jwtAuth');
+      const boundState = parseCookies(req)['sf_qq_state'];
+      if (!boundState || boundState !== state) {
+        return res.status(403).json(generateErrorResponse('QQ授权会话与当前浏览器不匹配，请重新发起登录'));
+      }
       const session = await qqCache.get(state);
       if (!session) return res.status(404).json(generateErrorResponse('QQ授权会话已过期，请重新登录'));
       // 一次性凭证：读取即消费。state 会出现在 302 跳转 URL 里（浏览器历史 / Referer 可泄露），
-      // 不消费的话 10 分钟内可被重放换取登录 Cookie。
-      await qqCache.delete(state);
+      // 不消费的话 10 分钟内可被重放换取登录 Cookie。（qqCache 只提供 del，此前调用不存在的 delete 会 500）
+      await qqCache.del(state);
+      res.clearCookie('sf_qq_state', { path: '/api/auth/qq' });
       const profile = session.profile || {};
 
       // QQ 登录成功时同样下发 HttpOnly Cookie（前端从这个接口拿结果，是浏览器侧的主路径）
